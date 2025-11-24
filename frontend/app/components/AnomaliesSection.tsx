@@ -102,29 +102,29 @@ export default function AnomaliesSection() {
               </div>
             )}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {anomaly.hrv !== undefined && (
+              {anomaly.hrv !== undefined && anomaly.hrv !== null && (
                 <div>
                   <div className="text-gray-400 text-sm">HRV</div>
                   <div className="text-white font-medium">{anomaly.hrv}</div>
                 </div>
               )}
-              {anomaly.resting_hr !== undefined && (
+              {anomaly.resting_hr !== undefined && anomaly.resting_hr !== null && (
                 <div>
                   <div className="text-gray-400 text-sm">Resting HR</div>
                   <div className="text-white font-medium">{anomaly.resting_hr}</div>
                 </div>
               )}
-              {anomaly.sleep_score !== undefined && (
+              {anomaly.sleep_score !== undefined && anomaly.sleep_score !== null && (
                 <div>
                   <div className="text-gray-400 text-sm">Sleep Score</div>
                   <div className="text-white font-medium">{anomaly.sleep_score}</div>
                 </div>
               )}
-              {anomaly.steps !== undefined && (
+              {anomaly.steps !== undefined && anomaly.steps !== null && (
                 <div>
                   <div className="text-gray-400 text-sm">Steps</div>
                   <div className="text-white font-medium">
-                    {anomaly.steps.toLocaleString()}
+                    {typeof anomaly.steps === 'number' ? anomaly.steps.toLocaleString() : anomaly.steps}
                   </div>
                 </div>
               )}

@@ -86,11 +86,11 @@ export default function MetricsSection() {
                 <div className="text-2xl font-bold text-white">{metricValues.sleep_score}</div>
               </div>
             )}
-            {metricValues.steps !== undefined && (
+            {metricValues.steps !== undefined && metricValues.steps !== null && (
               <div className="bg-gray-800 rounded p-4">
                 <div className="text-gray-400 text-sm mb-1">Steps</div>
                 <div className="text-2xl font-bold text-white">
-                  {metricValues.steps.toLocaleString()}
+                  {typeof metricValues.steps === 'number' ? metricValues.steps.toLocaleString() : metricValues.steps}
                 </div>
               </div>
             )}
