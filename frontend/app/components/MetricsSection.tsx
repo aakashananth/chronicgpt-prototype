@@ -96,28 +96,32 @@ export default function MetricsSection() {
             )}
           </div>
         ) : (
-          <div className="text-gray-400">
-            <p>Metrics data is available. Use the columns below to view specific metrics.</p>
+          <div className="text-gray-400 mb-4">
+            <p>Metrics data is available. Available columns are listed below.</p>
           </div>
         )}
         {metrics.total_records && (
-          <div className="mt-4 text-sm text-gray-400">
+          <div className="mb-4 text-sm text-gray-400">
             Total Records: {metrics.total_records}
           </div>
         )}
-        {metrics.columns && metrics.columns.length > 0 && (
+        {metrics.columns && metrics.columns.length > 0 ? (
           <div className="mt-4">
-            <div className="text-gray-400 text-sm mb-2">Available Columns:</div>
+            <div className="text-gray-400 text-sm mb-3 font-medium">Available Columns:</div>
             <div className="flex flex-wrap gap-2">
               {metrics.columns.map((col: string) => (
                 <span
                   key={col}
-                  className="bg-gray-800 px-3 py-1 rounded text-sm text-gray-300"
+                  className="bg-gray-800 px-3 py-1.5 rounded text-sm text-gray-300 border border-gray-700"
                 >
                   {col}
                 </span>
               ))}
             </div>
+          </div>
+        ) : (
+          <div className="mt-4 text-sm text-gray-500">
+            <p>No column information available. Run the pipeline to generate metrics data.</p>
           </div>
         )}
       </Card>
