@@ -94,7 +94,16 @@ health-metrics-llm-prototype/
 │   ├── anomaly_detection.py   # Anomaly detection logic
 │   ├── llm_explainer.py       # Azure OpenAI integration
 │   ├── pipeline.py            # Main pipeline orchestration
-│   └── run_pipeline.py        # CLI entrypoint
+│   ├── run_pipeline.py        # CLI entrypoint
+│   ├── api.py                 # FastAPI application
+│   ├── redis_cache.py         # Redis caching client
+│   ├── memory_cache.py        # In-memory cache fallback
+│   ├── parquet_loader.py      # Parquet file loader
+│   └── azure_storage_client.py # Azure Blob Storage client
+├── frontend/                  # Next.js 14 frontend application
+│   ├── app/                  # App Router pages
+│   ├── lib/                  # API client and utilities
+│   └── package.json
 ├── data/
 │   ├── .gitkeep
 │   └── sample_ultrahuman_export.json  # Sample data for testing
@@ -103,8 +112,45 @@ health-metrics-llm-prototype/
 ├── .env.example               # Environment variable template
 ├── .gitignore
 ├── requirements.txt
+├── run_api.py                # FastAPI server entrypoint
 └── README.md
 ```
+
+## Frontend Application
+
+A modern Next.js 14 frontend application is available in the `frontend/` directory.
+
+### Running the Frontend
+
+1. Navigate to the frontend directory:
+
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Configure environment variables:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Update `.env.local` with your API base URL (defaults to Azure App Service URL).
+
+4. Run the development server:
+
+```bash
+npm run dev
+```
+
+The frontend will be available at [http://localhost:3000](http://localhost:3000).
+
+See `frontend/README.md` for more details.
 
 ## Future Phases
 
@@ -112,9 +158,9 @@ Future phases of this project will add:
 
 - **Azure Data Lake**: For scalable data storage
 - **Azure Data Explorer**: For advanced analytics and querying
-- **Azure Cache for Redis**: For caching and performance optimization
-- **FastAPI Backend**: RESTful API for serving health insights
-- **React Web App**: User interface for viewing health metrics and explanations
+- **Azure Cache for Redis**: For caching and performance optimization (✅ Implemented)
+- **FastAPI Backend**: RESTful API for serving health insights (✅ Implemented)
+- **React Web App**: User interface for viewing health metrics and explanations (✅ Implemented)
 
 ## Important Disclaimer
 

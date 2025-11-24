@@ -3,6 +3,7 @@
 from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from .memory_cache import memory_cache
 from .parquet_loader import (
@@ -17,6 +18,15 @@ app = FastAPI(
     title="Health Metrics LLM Prototype API",
     description="API for health metrics analysis and anomaly detection",
     version="1.0.0",
+)
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with specific origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Initialize Redis cache client
