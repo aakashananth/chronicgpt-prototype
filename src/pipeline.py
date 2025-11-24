@@ -11,6 +11,7 @@ from .anomaly_detection import detect_anomalies
 from .azure_storage_client import AzureStorageClient
 from .config import config
 from .llm_explainer import generate_explanation
+from .memory_cache import memory_cache
 from .redis_cache import RedisCacheClient
 from .ultrahuman_client import UltrahumanClient
 
@@ -124,12 +125,16 @@ def run_daily_pipeline(days_back: int = 14) -> Dict[str, Any]:
         "blob_path": blob_path,
     }
 
+    # Cache results in Redis (if available)
     try:
         cache_client = RedisCacheClient()
         cache_client.cache_pipeline_result(result)
     except Exception as e:
         # Log error but don't fail the pipeline if Redis is not configured
         print(f"Warning: Redis caching skipped: {e}", file=sys.stderr)
+
+    # Always store in memory cache as fallback
+    memory_cache.store_pipeline_result(result)
 
     return result
 

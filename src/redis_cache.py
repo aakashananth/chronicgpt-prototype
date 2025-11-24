@@ -4,7 +4,7 @@ import json
 from typing import Any, Dict, List, Optional
 
 import redis
-from redis.exceptions import RedisError
+from redis.exceptions import RedisError, TimeoutError
 
 from .config import config
 
@@ -52,7 +52,7 @@ class RedisCacheClient:
                 )
                 # Test connection with a short timeout
                 self._redis_client.ping()
-            except redis.TimeoutError as e:
+            except TimeoutError as e:
                 print(f"Warning: Redis connection timeout: {e}")
                 print(f"  Host: {self.host}, Port: {self.port}")
                 print(f"  This usually means:")
@@ -138,7 +138,7 @@ class RedisCacheClient:
             if cached_data:
                 return json.loads(cached_data)
             return None
-        except (RedisError, json.JSONDecodeError):
+        except (RedisError, TimeoutError, json.JSONDecodeError):
             return None
 
     def get_cached_anomalies(self) -> Optional[List[Dict[str, Any]]]:
@@ -212,5 +212,5 @@ class RedisCacheClient:
                 return json.loads(cached_value)
             except json.JSONDecodeError:
                 return cached_value
-        except RedisError:
+        except (RedisError, TimeoutError):
             return None
