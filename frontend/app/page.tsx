@@ -6,7 +6,7 @@ import OverviewSection from './components/OverviewSection'
 import MetricsSection from './components/MetricsSection'
 import AnomaliesSection from './components/AnomaliesSection'
 import ExplanationSection from './components/ExplanationSection'
-import { PipelineRunResponse } from '../lib/api'
+import { PipelineRunResponse } from '@/lib/api'
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview')

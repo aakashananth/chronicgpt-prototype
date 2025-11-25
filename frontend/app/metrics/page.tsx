@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { apiClient, MetricsResponse } from '../../lib/api'
+import { apiClient, MetricsResponse } from '@/lib/api'
 
 export default function MetricsPage() {
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null)

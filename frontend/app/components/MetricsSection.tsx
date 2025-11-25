@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { apiClient, MetricsResponse } from '../../lib/api'
+import { apiClient, MetricsResponse } from '@/lib/api'
 import Card from './Card'
 import Alert from './Alert'
 
