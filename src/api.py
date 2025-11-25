@@ -3,9 +3,8 @@
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
 
 from .azure_storage_client import AzureStorageClient
 from .config import config
@@ -65,21 +64,6 @@ async def root():
     }
 
 
-@app.options("/{full_path:path}")
-async def options_handler(full_path: str, request: Request):
-    """Handle OPTIONS requests for CORS preflight."""
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, HEAD, PATCH",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "600",
-        },
-    )
-
-
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -90,7 +74,7 @@ async def health_check():
 async def redis_health_check():
     """Check Redis connection status."""
     redis_client = cache_client._get_redis_client()
-    
+
     if not cache_client.host or not cache_client.password:
         return {
             "status": "not_configured",
@@ -99,9 +83,9 @@ async def redis_health_check():
                 "host": cache_client.host or "not set",
                 "port": cache_client.port,
                 "ssl": cache_client.ssl,
-            }
+            },
         }
-    
+
     if redis_client is None:
         return {
             "status": "connection_failed",
@@ -110,9 +94,9 @@ async def redis_health_check():
                 "host": cache_client.host,
                 "port": cache_client.port,
                 "ssl": cache_client.ssl,
-            }
+            },
         }
-    
+
     try:
         # Test connection
         redis_client.ping()
@@ -123,7 +107,7 @@ async def redis_health_check():
                 "host": cache_client.host,
                 "port": cache_client.port,
                 "ssl": cache_client.ssl,
-            }
+            },
         }
     except Exception as e:
         return {
@@ -133,7 +117,7 @@ async def redis_health_check():
                 "host": cache_client.host,
                 "port": cache_client.port,
                 "ssl": cache_client.ssl,
-            }
+            },
         }
 
 
@@ -166,7 +150,9 @@ async def run_pipeline(days_back: int = 14) -> Dict[str, Any]:
 
         return response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Pipeline execution failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Pipeline execution failed: {str(e)}"
+        )
 
 
 @app.post("/pipeline/run_incremental")
@@ -485,4 +471,3 @@ async def get_metrics_history(
             status_code=500,
             detail=f"Failed to load metrics history: {str(e)}",
         )
-
