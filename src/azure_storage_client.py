@@ -1,9 +1,14 @@
 """Azure Blob Storage client module for uploading health metrics data."""
 
+import io
+import json
 import os
-from datetime import datetime
-from typing import Optional
+import sys
+from datetime import date, datetime
+from typing import List, Optional
 
+import pandas as pd
+from azure.core.exceptions import ResourceExistsError
 from azure.storage.blob import BlobServiceClient
 
 from .config import config
@@ -110,6 +115,220 @@ class AzureStorageClient:
         except Exception as e:
             raise RuntimeError(
                 f"Failed to upload to Azure Blob Storage: {e}. "
+                f"Check your Azure Storage configuration and network connectivity."
+            ) from e
+
+    def upload_raw_metrics(
+        self, patient_id: str, date_obj: date, raw_json: dict
+    ) -> Optional[str]:
+        """Upload raw Ultrahuman response for a given patient and date.
+
+        Path format:
+            raw/ultrahuman/patient_id={patient_id}/date={YYYY-MM-DD}/metrics_raw.json
+
+        Args:
+            patient_id: Patient identifier.
+            date_obj: Date object for the metrics.
+            raw_json: Raw JSON response dictionary to upload.
+
+        Returns:
+            Blob path if upload successful, None if Azure Storage is not configured or blob already exists.
+
+        Raises:
+            RuntimeError: If upload fails (other than already exists).
+            ValueError: If Azure Storage is not properly configured.
+        """
+        # Check if Azure Storage is configured
+        if not self.account_name or not self.account_key:
+            return None
+
+        try:
+            # Get blob service client
+            blob_service_client = self._get_blob_service_client()
+
+            # Generate blob name with partitioned path
+            date_str = date_obj.strftime("%Y-%m-%d")
+            blob_name = (
+                f"raw/ultrahuman/patient_id={patient_id}/date={date_str}/metrics_raw.json"
+            )
+
+            # Get container client
+            container_client = blob_service_client.get_container_client(
+                self.container_name
+            )
+
+            # Serialize JSON to bytes
+            json_bytes = json.dumps(raw_json, default=str).encode("utf-8")
+
+            # Upload blob with overwrite=False
+            container_client.upload_blob(
+                name=blob_name, data=json_bytes, overwrite=False
+            )
+
+            return blob_name
+
+        except ResourceExistsError:
+            # Blob already exists - this is expected for idempotent operations
+            date_str = date_obj.strftime("%Y-%m-%d")
+            blob_name = (
+                f"raw/ultrahuman/patient_id={patient_id}/date={date_str}/metrics_raw.json"
+            )
+            print(
+                f"Info: Raw metrics already exist for patient {patient_id}, date {date_str}. Skipping upload.",
+                file=sys.stderr,
+            )
+            return None
+        except ValueError:
+            # Re-raise ValueError as-is (configuration errors)
+            raise
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to upload raw metrics to Azure Blob Storage: {e}. "
+                f"Check your Azure Storage configuration and network connectivity."
+            ) from e
+
+    def upload_curated_daily_metrics(
+        self, patient_id: str, date_obj: date, df: pd.DataFrame
+    ) -> Optional[str]:
+        """Upload a single-row DataFrame of enriched daily metrics for a given patient and date.
+
+        Path format:
+            curated/daily_metrics/patient_id={patient_id}/date={YYYY-MM-DD}/metrics.parquet
+
+        Args:
+            patient_id: Patient identifier.
+            date_obj: Date object for the metrics.
+            df: Single-row DataFrame with enriched metrics.
+
+        Returns:
+            Blob path if upload successful, None if Azure Storage is not configured or blob already exists.
+
+        Raises:
+            RuntimeError: If upload fails (other than already exists).
+            ValueError: If Azure Storage is not properly configured or DataFrame is not single-row.
+        """
+        # Check if Azure Storage is configured
+        if not self.account_name or not self.account_key:
+            return None
+
+        # Validate DataFrame
+        if len(df) != 1:
+            raise ValueError(
+                f"Expected single-row DataFrame, got {len(df)} rows. "
+                f"This method should only be called with one row at a time."
+            )
+
+        try:
+            # Get blob service client
+            blob_service_client = self._get_blob_service_client()
+
+            # Generate blob name with partitioned path
+            date_str = date_obj.strftime("%Y-%m-%d")
+            blob_name = (
+                f"curated/daily_metrics/patient_id={patient_id}/date={date_str}/metrics.parquet"
+            )
+
+            # Get container client
+            container_client = blob_service_client.get_container_client(
+                self.container_name
+            )
+
+            # Convert DataFrame to Parquet bytes
+            parquet_buffer = io.BytesIO()
+            df.to_parquet(parquet_buffer, index=False)
+            parquet_buffer.seek(0)
+
+            # Upload blob with overwrite=False
+            container_client.upload_blob(
+                name=blob_name, data=parquet_buffer.read(), overwrite=False
+            )
+
+            return blob_name
+
+        except ResourceExistsError:
+            # Blob already exists - this is expected for idempotent operations
+            date_str = date_obj.strftime("%Y-%m-%d")
+            blob_name = (
+                f"curated/daily_metrics/patient_id={patient_id}/date={date_str}/metrics.parquet"
+            )
+            print(
+                f"Info: Curated metrics already exist for patient {patient_id}, date {date_str}. Skipping upload.",
+                file=sys.stderr,
+            )
+            return None
+        except ValueError:
+            # Re-raise ValueError as-is (configuration errors or validation errors)
+            raise
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to upload curated metrics to Azure Blob Storage: {e}. "
+                f"Check your Azure Storage configuration and network connectivity."
+            ) from e
+
+    def list_curated_dates_for_patient(self, patient_id: str) -> List[date]:
+        """List all dates for which curated daily metrics exist for this patient.
+
+        Lists blobs under the prefix:
+            curated/daily_metrics/patient_id={patient_id}/
+
+        Parses the {YYYY-MM-DD} date component from the path
+        (e.g. .../date=2025-11-21/metrics.parquet).
+
+        Args:
+            patient_id: Patient identifier.
+
+        Returns:
+            Sorted list of unique datetime.date objects.
+
+        Raises:
+            ValueError: If Azure Storage is not properly configured.
+            RuntimeError: If listing fails.
+        """
+        # Check if Azure Storage is configured
+        if not self.account_name or not self.account_key:
+            return []
+
+        try:
+            # Get blob service client
+            blob_service_client = self._get_blob_service_client()
+
+            # Get container client
+            container_client = blob_service_client.get_container_client(
+                self.container_name
+            )
+
+            # List blobs with prefix
+            prefix = f"curated/daily_metrics/patient_id={patient_id}/"
+            blobs = container_client.list_blobs(name_starts_with=prefix)
+
+            # Extract dates from blob paths
+            dates = []
+            for blob in blobs:
+                # Parse date from path: curated/daily_metrics/patient_id={patient_id}/date={YYYY-MM-DD}/metrics.parquet
+                blob_name = blob.name
+                if "/date=" in blob_name:
+                    try:
+                        # Extract date string from path
+                        date_part = blob_name.split("/date=")[1].split("/")[0]
+                        date_obj = datetime.strptime(date_part, "%Y-%m-%d").date()
+                        dates.append(date_obj)
+                    except (ValueError, IndexError) as e:
+                        # Skip invalid date formats
+                        print(
+                            f"Warning: Could not parse date from blob path {blob_name}: {e}",
+                            file=sys.stderr,
+                        )
+                        continue
+
+            # Return sorted unique dates
+            return sorted(set(dates))
+
+        except ValueError:
+            # Re-raise ValueError as-is (configuration errors)
+            raise
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to list curated dates for patient {patient_id}: {e}. "
                 f"Check your Azure Storage configuration and network connectivity."
             ) from e
 

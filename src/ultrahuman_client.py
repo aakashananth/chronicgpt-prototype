@@ -5,11 +5,13 @@ to fetch health metrics data.
 """
 
 import json
+import sys
 from datetime import datetime, timedelta
 from typing import Any, Dict, List
 
 import requests
 
+from .azure_storage_client import AzureStorageClient
 from .config import config
 
 
@@ -71,7 +73,7 @@ class UltrahumanClient:
         """Fetch health metrics for a specific date.
 
         Args:
-            date: The date to fetch metrics for.
+            date: The datetime to fetch metrics for.
 
         Returns:
             A list of metric records (dictionaries) for the given date.
@@ -106,6 +108,26 @@ class UltrahumanClient:
 
             # Handle different response formats
             records = self._extract_records(data, date_str)
+
+            # Upload raw response to Azure Blob Storage
+            try:
+                storage_client = AzureStorageClient()
+                date_obj = date.date()  # Convert datetime.datetime to datetime.date
+                blob_path = storage_client.upload_raw_metrics(
+                    self.patient_id, date_obj, data
+                )
+                if blob_path:
+                    print(
+                        f"Info: Uploaded raw metrics for patient {self.patient_id}, date {date_str}",
+                        file=sys.stderr,
+                    )
+            except Exception as e:
+                # Log warning but don't fail the API call if storage upload fails
+                print(
+                    f"Warning: Failed to upload raw metrics for date {date_str}: {e}",
+                    file=sys.stderr,
+                )
+
             return records
 
         except requests.RequestException as e:

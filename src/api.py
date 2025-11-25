@@ -11,7 +11,7 @@ from .parquet_loader import (
     extract_metrics_from_parquet,
     get_parquet_path,
 )
-from .pipeline import run_daily_pipeline
+from .pipeline import run_daily_pipeline, run_incremental_pipeline
 from .redis_cache import RedisCacheClient
 
 app = FastAPI(
@@ -47,6 +47,7 @@ async def root():
             "/health": "Health check",
             "/health/redis": "Check Redis connection status",
             "/pipeline/run": "Run the daily pipeline",
+            "/pipeline/run_incremental": "Run the incremental pipeline (only new dates)",
             "/pipeline/metrics": "Get cached metrics",
             "/pipeline/anomalies": "Get cached anomalies",
             "/pipeline/explanation": "Get cached explanation",
@@ -142,6 +143,44 @@ async def run_pipeline(days_back: int = 14) -> Dict[str, Any]:
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline execution failed: {str(e)}")
+
+
+@app.post("/pipeline/run_incremental")
+async def run_incremental_pipeline_endpoint(days_back: int = 14) -> Dict[str, Any]:
+    """Run the incremental pipeline for the configured patient_id.
+
+    Only new dates within the last `days_back` days will be fetched and processed.
+
+    Args:
+        days_back: Number of days to look back from today (default: 14).
+
+    Returns:
+        Pipeline results including new dates processed, anomalies, explanation, and paths.
+    """
+    try:
+        # Run incremental pipeline
+        result = run_incremental_pipeline(days_back=days_back)
+
+        # Cache the result (already done in run_incremental_pipeline, but ensure it's cached)
+        cache_client.cache_pipeline_result(result)
+
+        # Prepare response (exclude DataFrame for JSON serialization)
+        response = {
+            "status": "success",
+            "new_dates_processed": result.get("new_dates_processed", []),
+            "anomaly_count": result.get("anomaly_count", 0),
+            "recent_anomalies": result.get("recent_anomalies", []),
+            "explanation": result.get("explanation", ""),
+            "blob_path": result.get("blob_path"),
+            "curated_blob_paths": result.get("curated_blob_paths", []),
+            "metrics_count": len(result.get("enriched", [])),
+        }
+
+        return response
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Incremental pipeline execution failed: {str(e)}"
+        )
 
 
 @app.get("/pipeline/metrics")
