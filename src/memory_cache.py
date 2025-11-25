@@ -2,6 +2,8 @@
 
 from typing import Any, Dict, List, Optional
 
+from .parquet_loader import extract_metrics_from_parquet
+
 
 class MemoryCache:
     """Simple in-memory cache for storing pipeline results."""
@@ -27,13 +29,24 @@ class MemoryCache:
     def get_metrics(self) -> Optional[Dict[str, Any]]:
         """Get cached metrics from memory.
 
+        If parquet_path is available, loads metrics from parquet file.
+        Otherwise returns None to allow fallback to parquet loader.
+
         Returns:
             Cached metrics dictionary or None if not available.
         """
         if self._cache is None:
             return None
-        # Return a metrics-like structure (could be enriched from parquet if needed)
-        return self._cache
+        
+        # If we have a parquet_path, try to load metrics from it
+        parquet_path = self._cache.get("parquet_path")
+        if parquet_path:
+            metrics = extract_metrics_from_parquet(parquet_path)
+            if metrics is not None:
+                return metrics
+        
+        # Otherwise return None to allow fallback to parquet loader
+        return None
 
     def get_anomalies(self) -> Optional[List[Dict[str, Any]]]:
         """Get cached anomalies from memory.
@@ -53,7 +66,11 @@ class MemoryCache:
         """
         if self._cache is None:
             return None
-        return self._cache.get("explanation")
+        explanation = self._cache.get("explanation")
+        # Return None if explanation is empty string
+        if explanation == "":
+            return None
+        return explanation
 
     def get_blob_path(self) -> Optional[str]:
         """Get cached blob path from memory.
