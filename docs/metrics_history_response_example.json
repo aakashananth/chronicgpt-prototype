@@ -1,0 +1,29 @@
+{
+  "dates": [
+    "2025-01-01",
+    "2025-01-02",
+    "2025-01-03",
+    "2025-01-04",
+    "2025-01-05"
+  ],
+  "hrv": [45.2, 47.1, 43.8, 46.5, 44.9],
+  "resting_hr": [58, 57, 59, 58, 60],
+  "sleep_score": [82, 85, 78, 83, 80],
+  "steps": [8234, 9123, 7654, 8891, 8012],
+  "recovery_index": [72.5, 75.2, 68.9, 74.1, 70.3],
+  "movement_index": [65.8, 68.4, 62.1, 67.2, 64.5],
+  "active_minutes": [45, 52, 38, 48, 42],
+  "vo2_max": [52.3, 53.1, 51.8, 52.7, 52.0],
+  "low_hrv_flag": [false, false, true, false, false],
+  "high_rhr_flag": [false, false, false, false, true],
+  "low_sleep_flag": [false, false, true, false, false],
+  "low_steps_flag": [false, false, false, false, false],
+  "is_anomalous": [false, false, true, false, true],
+  "anomaly_severity": [0, 0, 2, 0, 1],
+  "date_range": {
+    "start": "2025-01-01",
+    "end": "2025-01-05"
+  },
+  "total_records": 5
+}
+

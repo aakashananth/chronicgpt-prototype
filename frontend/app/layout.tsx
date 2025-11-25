@@ -1,12 +1,13 @@
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
+import { ToastContainer } from '@/components/ui/toast'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'ChronicGPT - Health Metrics Dashboard',
-  description: 'AI-powered health metrics analysis with anomaly detection',
+  title: 'Health Metrics LLM Dashboard',
+  description: 'Ultrahuman + Azure OpenAI prototype',
 }
 
 export default function RootLayout({
@@ -18,6 +19,7 @@ export default function RootLayout({
     <html lang="en" className="dark">
       <body className={inter.className}>
         {children}
+        <ToastContainer />
       </body>
     </html>
   )

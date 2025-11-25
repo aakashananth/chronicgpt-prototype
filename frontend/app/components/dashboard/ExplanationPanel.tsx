@@ -4,11 +4,16 @@ import { useEffect, useState } from 'react'
 import { apiClient } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Bot, Copy, Check } from 'lucide-react'
+import { Bot, Copy, Check, RefreshCw } from 'lucide-react'
 
-export default function ExplanationPanel() {
+interface ExplanationPanelProps {
+  refreshKey?: number
+}
+
+export default function ExplanationPanel({ refreshKey }: ExplanationPanelProps) {
   const [explanation, setExplanation] = useState<string>('')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -16,10 +21,12 @@ export default function ExplanationPanel() {
     const fetchExplanation = async () => {
       try {
         setLoading(true)
+        setError(null)
         const data = await apiClient.getExplanation()
         setExplanation(data.explanation)
         setExpanded(!!data.explanation)
       } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch explanation')
         console.error('Failed to fetch explanation:', err)
       } finally {
         setLoading(false)
@@ -27,7 +34,7 @@ export default function ExplanationPanel() {
     }
 
     fetchExplanation()
-  }, [])
+  }, [refreshKey])
 
   const handleCopy = async () => {
     try {
@@ -78,11 +85,49 @@ export default function ExplanationPanel() {
     )
   }
 
+  const handleRefresh = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const data = await apiClient.getExplanation()
+      setExplanation(data.explanation)
+      setExpanded(!!data.explanation)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch explanation')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   if (loading) {
     return (
       <Card>
-        <CardContent className="p-6">
-          <div className="animate-pulse">Loading AI insights...</div>
+        <CardHeader>
+          <CardTitle>AI Explanation</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="animate-pulse text-muted-foreground">Loading AI insights...</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>AI Explanation</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <p className="text-destructive mb-4">{error}</p>
+            <button
+              onClick={handleRefresh}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              Retry
+            </button>
+          </div>
         </CardContent>
       </Card>
     )
@@ -101,21 +146,36 @@ export default function ExplanationPanel() {
           </div>
           <div className="flex items-center gap-2">
             {explanation && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleCopy()
-                }}
-                className="h-8 w-8"
-              >
-                {copied ? (
-                  <Check className="h-4 w-4" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleRefresh()
+                  }}
+                  className="h-8 w-8"
+                  title="Refresh explanation"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleCopy()
+                  }}
+                  className="h-8 w-8"
+                  title="Copy to clipboard"
+                >
+                  {copied ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </>
             )}
             <span className="text-sm text-muted-foreground">
               {expanded ? '▼' : '▶'}

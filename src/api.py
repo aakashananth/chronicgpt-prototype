@@ -1,10 +1,13 @@
 """FastAPI application for health metrics pipeline."""
 
+from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from .azure_storage_client import AzureStorageClient
+from .config import config
 from .memory_cache import memory_cache
 from .parquet_loader import (
     extract_anomalies_from_parquet,
@@ -49,6 +52,7 @@ async def root():
             "/pipeline/run": "Run the daily pipeline",
             "/pipeline/run_incremental": "Run the incremental pipeline (only new dates)",
             "/pipeline/metrics": "Get cached metrics",
+            "/pipeline/metrics/history": "Get historical metrics for charts",
             "/pipeline/anomalies": "Get cached anomalies",
             "/pipeline/explanation": "Get cached explanation",
             "/pipeline/blob-path": "Get cached blob path",
@@ -313,4 +317,152 @@ async def get_blob_path() -> Dict[str, str]:
         status_code=404,
         detail="No cached blob path found. Run the pipeline first via POST /pipeline/run",
     )
+
+
+@app.get("/pipeline/metrics/history")
+async def get_metrics_history(
+    days: int = Query(30, ge=1, le=365, description="Number of days to look back"),
+    end_date: Optional[str] = Query(
+        None, description="End date in YYYY-MM-DD format (defaults to today)"
+    ),
+) -> Dict[str, Any]:
+    """Get historical metrics data in chart-friendly format.
+
+    Loads curated daily metrics from Azure Blob Storage for the configured patient_id
+    within the specified date range. Returns data as arrays suitable for charting.
+
+    Args:
+        days: Number of days to look back from end_date (default: 30, max: 365).
+        end_date: End date in YYYY-MM-DD format. If not provided, uses today.
+
+    Returns:
+        Dictionary with chart-friendly data:
+        {
+            "dates": ["YYYY-MM-DD", ...],
+            "hrv": [number, ...],
+            "resting_hr": [number, ...],
+            "sleep_score": [number, ...],
+            "steps": [number, ...],
+            "recovery_index": [number | null, ...],
+            "movement_index": [number | null, ...],
+            "active_minutes": [number | null, ...],
+            "vo2_max": [number | null, ...],
+            "low_hrv_flag": [bool, ...],
+            "high_rhr_flag": [bool, ...],
+            "low_sleep_flag": [bool, ...],
+            "low_steps_flag": [bool, ...],
+            "is_anomalous": [bool, ...],
+            "anomaly_severity": [number, ...],
+            "date_range": {
+                "start": "YYYY-MM-DD",
+                "end": "YYYY-MM-DD"
+            },
+            "total_records": number
+        }
+
+    Raises:
+        HTTPException: If patient_id is not configured or data loading fails.
+    """
+    # Get patient_id from config
+    patient_id = config.ultrahuman.patient_id
+    if not patient_id:
+        raise HTTPException(
+            status_code=400,
+            detail="patient_id is not configured. Set ULTRAHUMAN_PATIENT_ID or ULTRAHUMAN_EMAIL in .env",
+        )
+
+    # Parse end_date or use today
+    if end_date:
+        try:
+            end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid date format: {end_date}. Use YYYY-MM-DD format.",
+            )
+    else:
+        end_date_obj = datetime.now().date()
+
+    # Calculate start_date
+    start_date_obj = end_date_obj - timedelta(days=days - 1)
+
+    try:
+        # Load data from Azure Blob Storage
+        storage_client = AzureStorageClient()
+        df = storage_client.load_curated_metrics_for_date_range(
+            patient_id, start_date_obj, end_date_obj
+        )
+
+        if df.empty:
+            return {
+                "dates": [],
+                "hrv": [],
+                "resting_hr": [],
+                "sleep_score": [],
+                "steps": [],
+                "recovery_index": [],
+                "movement_index": [],
+                "active_minutes": [],
+                "vo2_max": [],
+                "low_hrv_flag": [],
+                "high_rhr_flag": [],
+                "low_sleep_flag": [],
+                "low_steps_flag": [],
+                "is_anomalous": [],
+                "anomaly_severity": [],
+                "date_range": {
+                    "start": start_date_obj.strftime("%Y-%m-%d"),
+                    "end": end_date_obj.strftime("%Y-%m-%d"),
+                },
+                "total_records": 0,
+            }
+
+        # Ensure date column is sorted
+        if "date" in df.columns:
+            df = df.sort_values("date").reset_index(drop=True)
+            # Convert date to string for JSON serialization
+            dates = df["date"].astype(str).tolist()
+        else:
+            dates = []
+
+        # Extract metric arrays
+        def get_array(column_name: str, default_value=None):
+            """Get array from DataFrame column, using default_value for nulls."""
+            if column_name in df.columns:
+                return df[column_name].fillna(default_value).tolist()
+            return []
+
+        # Build response
+        response = {
+            "dates": dates,
+            "hrv": get_array("hrv"),
+            "resting_hr": get_array("resting_hr"),
+            "sleep_score": get_array("sleep_score"),
+            "steps": get_array("steps"),
+            "recovery_index": get_array("recovery_index", None),
+            "movement_index": get_array("movement_index", None),
+            "active_minutes": get_array("active_minutes", None),
+            "vo2_max": get_array("vo2_max", None),
+            "low_hrv_flag": get_array("low_hrv_flag", False),
+            "high_rhr_flag": get_array("high_rhr_flag", False),
+            "low_sleep_flag": get_array("low_sleep_flag", False),
+            "low_steps_flag": get_array("low_steps_flag", False),
+            "is_anomalous": get_array("is_anomalous", False),
+            "anomaly_severity": get_array("anomaly_severity", 0),
+            "date_range": {
+                "start": start_date_obj.strftime("%Y-%m-%d"),
+                "end": end_date_obj.strftime("%Y-%m-%d"),
+            },
+            "total_records": len(df),
+        }
+
+        return response
+
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to load metrics history: {str(e)}",
+        )
 

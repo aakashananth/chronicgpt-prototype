@@ -1,9 +1,12 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import HeaderBar from './components/dashboard/HeaderBar'
+import ControlStatusRow from './components/dashboard/ControlStatusRow'
 import MetricCardsRow from './components/dashboard/MetricCardsRow'
-import ControlsBar from './components/dashboard/ControlsBar'
+import DateRangeSelector from './components/dashboard/DateRangeSelector'
+import DataCompletenessIndicator from './components/dashboard/DataCompletenessIndicator'
+import SummaryPanel from './components/dashboard/SummaryPanel'
 import ChartsGrid from './components/dashboard/ChartsGrid'
 import AnomaliesPanel from './components/dashboard/AnomaliesPanel'
 import ExplanationPanel from './components/dashboard/ExplanationPanel'
@@ -11,63 +14,84 @@ import { PipelineRunResponse } from '@/lib/api'
 
 export default function Dashboard() {
   const [refreshKey, setRefreshKey] = useState(0)
-  const [timeRange, setTimeRange] = useState(7)
-  const [selectedDate, setSelectedDate] = useState<string | undefined>()
+  const [days, setDays] = useState(30)
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
   const handlePipelineRun = (result: PipelineRunResponse) => {
     // Update last updated timestamp
     localStorage.setItem('lastDataUpdate', new Date().toISOString())
+    window.dispatchEvent(new Event('dataUpdated'))
     // Trigger refresh of all components
-    setRefreshKey((prev) => prev + 1)
-  }
-
-  const handleRefresh = () => {
     setRefreshKey((prev) => prev + 1)
   }
 
   return (
     <div className="min-h-screen bg-background">
       <HeaderBar />
-      <main className="container mx-auto px-4 py-8 max-w-7xl">
-        <div className="space-y-8">
-          {/* Today's Key Metrics */}
+      <main className="container mx-auto px-4 py-6 sm:py-8 max-w-7xl">
+        <div className="space-y-6 sm:space-y-8">
+          {/* Control & Status Row */}
+          <section>
+            <ControlStatusRow onPipelineRun={handlePipelineRun} />
+          </section>
+
+          {/* Today's Snapshot Cards */}
           <section>
             <h2 className="text-xl font-semibold mb-4 text-foreground">
-              Today's Metrics
+              Today's Snapshot
             </h2>
-            <MetricCardsRow key={refreshKey} />
+            <MetricCardsRow refreshKey={refreshKey} />
           </section>
 
-          {/* Controls */}
+          {/* Date Picker + Time Window Selector */}
           <section>
-            <ControlsBar
-              onPipelineRun={handlePipelineRun}
-              onRefresh={handleRefresh}
-              onTimeRangeChange={setTimeRange}
-              onDateChange={setSelectedDate}
-            />
+            <div className="space-y-4">
+              <DateRangeSelector
+                onDateChange={setSelectedDate}
+                onDaysChange={setDays}
+                defaultDays={30}
+              />
+              <DataCompletenessIndicator
+                days={days}
+                endDate={selectedDate}
+                refreshKey={refreshKey}
+              />
+            </div>
           </section>
 
-          {/* Time-Series Charts */}
+          {/* Summary & Charts Section */}
           <section>
-            <h2 className="text-xl font-semibold mb-4 text-foreground">
-              Trends
-            </h2>
-            <ChartsGrid
-              key={refreshKey}
-              timeRange={timeRange}
-              selectedDate={selectedDate}
-            />
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+              <div className="lg:col-span-1">
+                <SummaryPanel
+                  days={days}
+                  endDate={selectedDate}
+                  refreshKey={refreshKey}
+                />
+              </div>
+              <div className="lg:col-span-2">
+                <h2 className="text-xl font-semibold mb-4 text-foreground">
+                  Trends
+                </h2>
+                <ChartsGrid
+                  days={days}
+                  endDate={selectedDate}
+                  refreshKey={refreshKey}
+                />
+              </div>
+            </div>
           </section>
 
-          {/* Anomalies */}
+          {/* Anomalies & AI Explanation - Two Column Layout */}
           <section>
-            <AnomaliesPanel key={refreshKey} />
-          </section>
-
-          {/* AI Explanation */}
-          <section>
-            <ExplanationPanel key={refreshKey} />
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div>
+                <AnomaliesPanel refreshKey={refreshKey} />
+              </div>
+              <div>
+                <ExplanationPanel refreshKey={refreshKey} />
+              </div>
+            </div>
           </section>
         </div>
       </main>

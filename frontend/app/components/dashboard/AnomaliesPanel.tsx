@@ -1,25 +1,35 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { apiClient, Anomaly } from '@/lib/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { AlertTriangle } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { AlertTriangle, Filter, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
-export default function AnomaliesPanel() {
+interface AnomaliesPanelProps {
+  refreshKey?: number
+}
+
+export default function AnomaliesPanel({ refreshKey }: AnomaliesPanelProps) {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(true)
+  const [severityFilter, setSeverityFilter] = useState<number | null>(null)
+  const [flagFilter, setFlagFilter] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchAnomalies = async () => {
       try {
         setLoading(true)
+        setError(null)
         const data = await apiClient.getAnomalies()
         setAnomalies(data)
         setExpanded(data.length > 0)
       } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch anomalies')
         console.error('Failed to fetch anomalies:', err)
       } finally {
         setLoading(false)
@@ -27,13 +37,37 @@ export default function AnomaliesPanel() {
     }
 
     fetchAnomalies()
-  }, [])
+  }, [refreshKey])
 
   if (loading) {
     return (
       <Card>
-        <CardContent className="p-6">
-          <div className="animate-pulse">Loading anomalies...</div>
+        <CardHeader>
+          <CardTitle>Recent Anomalies</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="animate-pulse text-muted-foreground">Loading anomalies...</div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Anomalies</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <p className="text-destructive mb-4">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-sm text-muted-foreground hover:text-foreground"
+            >
+              Retry
+            </button>
+          </div>
         </CardContent>
       </Card>
     )
@@ -48,11 +82,34 @@ export default function AnomaliesPanel() {
 
   const getFlagBadges = (anomaly: Anomaly) => {
     const flags = []
-    if (anomaly.low_hrv_flag) flags.push({ label: 'Low HRV', variant: 'destructive' as const })
-    if (anomaly.high_rhr_flag) flags.push({ label: 'High RHR', variant: 'destructive' as const })
-    if (anomaly.low_sleep_flag) flags.push({ label: 'Low Sleep', variant: 'warning' as const })
-    if (anomaly.low_steps_flag) flags.push({ label: 'Low Steps', variant: 'warning' as const })
+    if (anomaly.low_hrv_flag) flags.push({ label: 'Low HRV', variant: 'destructive' as const, key: 'low_hrv' })
+    if (anomaly.high_rhr_flag) flags.push({ label: 'High RHR', variant: 'destructive' as const, key: 'high_rhr' })
+    if (anomaly.low_sleep_flag) flags.push({ label: 'Low Sleep', variant: 'warning' as const, key: 'low_sleep' })
+    if (anomaly.low_steps_flag) flags.push({ label: 'Low Steps', variant: 'warning' as const, key: 'low_steps' })
     return flags
+  }
+
+  // Filter anomalies
+  const filteredAnomalies = useMemo(() => {
+    return anomalies.filter((anomaly) => {
+      if (severityFilter !== null && (anomaly.anomaly_severity || 0) !== severityFilter) {
+        return false
+      }
+      if (flagFilter) {
+        const flags = getFlagBadges(anomaly)
+        if (!flags.some(f => f.key === flagFilter)) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [anomalies, severityFilter, flagFilter])
+
+  const hasActiveFilters = severityFilter !== null || flagFilter !== null
+
+  const clearFilters = () => {
+    setSeverityFilter(null)
+    setFlagFilter(null)
   }
 
   return (
@@ -65,7 +122,7 @@ export default function AnomaliesPanel() {
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-foreground" />
             <CardTitle>
-              Recent Anomalies {anomalies.length > 0 && `(${anomalies.length})`}
+              Recent Anomalies {filteredAnomalies.length > 0 && `(${filteredAnomalies.length}${hasActiveFilters ? ` of ${anomalies.length}` : ''})`}
             </CardTitle>
           </div>
           <span className="text-sm text-muted-foreground">
@@ -86,7 +143,53 @@ export default function AnomaliesPanel() {
             </div>
           ) : (
             <div className="space-y-4">
-              {anomalies.map((anomaly, index) => {
+              {/* Filters */}
+              <div className="flex flex-wrap items-center gap-2 pb-4 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">Filter by:</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <select
+                    value={severityFilter === null ? '' : severityFilter}
+                    onChange={(e) => setSeverityFilter(e.target.value === '' ? null : parseInt(e.target.value))}
+                    className="bg-background border border-border rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">All Severities</option>
+                    <option value="1">Severity 1</option>
+                    <option value="2">Severity 2</option>
+                    <option value="3">Severity 3+</option>
+                  </select>
+                  <select
+                    value={flagFilter || ''}
+                    onChange={(e) => setFlagFilter(e.target.value === '' ? null : e.target.value)}
+                    className="bg-background border border-border rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">All Flags</option>
+                    <option value="low_hrv">Low HRV</option>
+                    <option value="high_rhr">High RHR</option>
+                    <option value="low_sleep">Low Sleep</option>
+                    <option value="low_steps">Low Steps</option>
+                  </select>
+                  {hasActiveFilters && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={clearFilters}
+                      className="h-7 px-2 text-xs"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Clear
+                    </Button>
+                  )}
+                </div>
+              </div>
+              {filteredAnomalies.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-muted-foreground">No anomalies match the selected filters.</p>
+                </div>
+              ) : (
+                filteredAnomalies.map((anomaly, index) => {
                 const flags = getFlagBadges(anomaly)
                 return (
                   <div
@@ -149,7 +252,7 @@ export default function AnomaliesPanel() {
                     </div>
                   </div>
                 )
-              })}
+              }))}
             </div>
           )}
         </CardContent>

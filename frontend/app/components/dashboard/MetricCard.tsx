@@ -3,6 +3,7 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { LineChart, Line, ResponsiveContainer } from 'recharts'
 
 interface MetricCardProps {
   title: string
@@ -12,6 +13,7 @@ interface MetricCardProps {
   icon?: React.ReactNode
   className?: string
   formatValue?: (val: number) => string
+  sparklineData?: number[]
 }
 
 export default function MetricCard({
@@ -22,6 +24,7 @@ export default function MetricCard({
   icon,
   className,
   formatValue,
+  sparklineData,
 }: MetricCardProps) {
   const displayValue =
     value !== null && value !== undefined
@@ -64,6 +67,21 @@ export default function MetricCard({
         </div>
         {trendLabel && (
           <p className="text-xs text-muted-foreground mt-2">{trendLabel}</p>
+        )}
+        {sparklineData && sparklineData.length > 0 && (
+          <div className="mt-3 h-12 w-full opacity-60">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={sparklineData.map((val, i) => ({ value: val, index: i }))}>
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#888888"
+                  strokeWidth={1.5}
+                  dot={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         )}
       </CardContent>
     </Card>

@@ -38,6 +38,29 @@ export interface PipelineRunResponse {
   metrics_count: number
 }
 
+export interface MetricsHistoryResponse {
+  dates: string[]
+  hrv: number[]
+  resting_hr: number[]
+  sleep_score: number[]
+  steps: number[]
+  recovery_index?: (number | null)[]
+  movement_index?: (number | null)[]
+  active_minutes?: (number | null)[]
+  vo2_max?: (number | null)[]
+  low_hrv_flag: boolean[]
+  high_rhr_flag: boolean[]
+  low_sleep_flag: boolean[]
+  low_steps_flag: boolean[]
+  is_anomalous: boolean[]
+  anomaly_severity: number[]
+  date_range: {
+    start: string
+    end: string
+  }
+  total_records: number
+}
+
 class ApiClient {
   private baseUrl: string
 
@@ -91,6 +114,13 @@ class ApiClient {
 
   async healthCheck(): Promise<{ status: string }> {
     return this.fetch<{ status: string }>('/health')
+  }
+
+  async getMetricsHistory(params: { days?: number; end_date?: string }): Promise<MetricsHistoryResponse> {
+    const queryParams = new URLSearchParams()
+    if (params.days) queryParams.append('days', params.days.toString())
+    if (params.end_date) queryParams.append('end_date', params.end_date)
+    return this.fetch<MetricsHistoryResponse>(`/pipeline/metrics/history?${queryParams.toString()}`)
   }
 }
 

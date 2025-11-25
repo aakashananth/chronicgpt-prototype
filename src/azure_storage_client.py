@@ -332,3 +332,98 @@ class AzureStorageClient:
                 f"Check your Azure Storage configuration and network connectivity."
             ) from e
 
+    def load_curated_metrics_for_date_range(
+        self, patient_id: str, start_date: date, end_date: date
+    ) -> pd.DataFrame:
+        """Load curated daily metrics for a date range from Azure Blob Storage.
+
+        Loads all parquet files for the patient within the specified date range
+        and combines them into a single DataFrame.
+
+        Args:
+            patient_id: Patient identifier.
+            start_date: Start date (inclusive).
+            end_date: End date (inclusive).
+
+        Returns:
+            DataFrame with all metrics for the date range, sorted by date.
+            Empty DataFrame if no data found or Azure Storage is not configured.
+
+        Raises:
+            ValueError: If Azure Storage is not properly configured.
+            RuntimeError: If loading fails.
+        """
+        # Check if Azure Storage is configured
+        if not self.account_name or not self.account_key:
+            return pd.DataFrame()
+
+        try:
+            # Get blob service client
+            blob_service_client = self._get_blob_service_client()
+
+            # Get container client
+            container_client = blob_service_client.get_container_client(
+                self.container_name
+            )
+
+            # List blobs with prefix
+            prefix = f"curated/daily_metrics/patient_id={patient_id}/"
+            blobs = container_client.list_blobs(name_starts_with=prefix)
+
+            # Load dataframes for dates in range
+            dataframes = []
+            for blob in blobs:
+                # Parse date from path: curated/daily_metrics/patient_id={patient_id}/date={YYYY-MM-DD}/metrics.parquet
+                blob_name = blob.name
+                if "/date=" in blob_name:
+                    try:
+                        # Extract date string from path
+                        date_part = blob_name.split("/date=")[1].split("/")[0]
+                        blob_date = datetime.strptime(date_part, "%Y-%m-%d").date()
+
+                        # Check if date is in range
+                        if start_date <= blob_date <= end_date:
+                            # Download blob and load as DataFrame
+                            blob_client = container_client.get_blob_client(blob_name)
+                            blob_data = blob_client.download_blob().readall()
+                            df = pd.read_parquet(io.BytesIO(blob_data))
+                            dataframes.append(df)
+                    except (ValueError, IndexError) as e:
+                        # Skip invalid date formats
+                        print(
+                            f"Warning: Could not parse date from blob path {blob_name}: {e}",
+                            file=sys.stderr,
+                        )
+                        continue
+                    except Exception as e:
+                        print(
+                            f"Warning: Could not load blob {blob_name}: {e}",
+                            file=sys.stderr,
+                        )
+                        continue
+
+            # Combine all dataframes
+            if not dataframes:
+                return pd.DataFrame()
+
+            combined_df = pd.concat(dataframes, ignore_index=True)
+
+            # Ensure date column exists and sort by date
+            if "date" in combined_df.columns:
+                # Convert date column to date type if needed
+                if combined_df["date"].dtype == "object":
+                    combined_df["date"] = pd.to_datetime(combined_df["date"]).dt.date
+                combined_df = combined_df.sort_values("date").reset_index(drop=True)
+
+            return combined_df
+
+        except ValueError:
+            # Re-raise ValueError as-is (configuration errors)
+            raise
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to load curated metrics for patient {patient_id} "
+                f"from {start_date} to {end_date}: {e}. "
+                f"Check your Azure Storage configuration and network connectivity."
+            ) from e
+

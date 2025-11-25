@@ -1,37 +1,46 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { apiClient, MetricsResponse } from '@/lib/api'
-import TimeSeriesChart from './TimeSeriesChart'
-import { format, parseISO, subDays } from 'date-fns'
+import { apiClient, MetricsHistoryResponse } from '@/lib/api'
+import { Card, CardContent } from '@/components/ui/card'
+import HrvTrendChart from '../charts/HrvTrendChart'
+import RestingHrTrendChart from '../charts/RestingHrTrendChart'
+import SleepScoreTrendChart from '../charts/SleepScoreTrendChart'
+import StepsTrendChart from '../charts/StepsTrendChart'
+import { BarChart3 } from 'lucide-react'
+import { format } from 'date-fns'
 
 interface ChartsGridProps {
-  timeRange?: number
-  selectedDate?: string
+  days?: number
+  endDate?: string | null
+  refreshKey?: number
 }
 
-export default function ChartsGrid({
-  timeRange = 7,
-  selectedDate,
-}: ChartsGridProps) {
-  const [metrics, setMetrics] = useState<MetricsResponse | null>(null)
+export default function ChartsGrid({ days = 30, endDate, refreshKey }: ChartsGridProps) {
+  const [history, setHistory] = useState<MetricsHistoryResponse | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    const fetchMetrics = async () => {
+    const fetchHistory = async () => {
       try {
         setLoading(true)
-        const data = await apiClient.getMetrics()
-        setMetrics(data)
+        setError(null)
+        const data = await apiClient.getMetricsHistory({
+          days,
+          end_date: endDate || undefined,
+        })
+        setHistory(data)
       } catch (err) {
-        console.error('Failed to fetch metrics:', err)
+        setError(err instanceof Error ? err.message : 'Failed to fetch metrics history')
+        console.error('Failed to fetch metrics history:', err)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchMetrics()
-  }, [])
+    fetchHistory()
+  }, [days, endDate, refreshKey])
 
   if (loading) {
     return (
@@ -46,72 +55,75 @@ export default function ChartsGrid({
     )
   }
 
-  if (!metrics) {
+  if (error) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
-        No metrics data available. Run the pipeline to generate charts.
+      <div className="text-center py-12">
+        <p className="text-destructive mb-4">{error}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          Retry
+        </button>
       </div>
     )
   }
 
-  // Transform metrics data for charts
-  // This is a simplified version - in production, you'd want to fetch
-  // time-series data from the API
-  const metricData = metrics as any
-
-  // Mock time-series data structure
-  // In production, this would come from the API
-  const generateMockData = (metricName: string, baseValue: number) => {
-    const days = Array.from({ length: timeRange }, (_, i) => {
-      const date = subDays(new Date(), timeRange - i - 1)
-      return {
-        date: format(date, 'MMM d'),
-        value: baseValue + (Math.random() - 0.5) * baseValue * 0.2,
-        isAnomaly: false,
-      }
-    })
-    return days
+  if (!history || history.total_records === 0) {
+    return (
+      <Card>
+        <CardContent className="py-16">
+          <div className="text-center">
+            <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-semibold mb-2">No Data Available</h3>
+            <p className="text-muted-foreground mb-4">
+              Run the pipeline to start tracking your health metrics.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
-  const hrvData = metricData.hrv
-    ? generateMockData('hrv', metricData.hrv)
-    : []
-  const rhrData = metricData.resting_hr
-    ? generateMockData('resting_hr', metricData.resting_hr)
-    : []
-  const sleepData = metricData.sleep_score
-    ? generateMockData('sleep_score', metricData.sleep_score)
-    : []
-  const stepsData = metricData.steps
-    ? generateMockData('steps', metricData.steps)
-    : []
+  // Transform data for charts - format dates and combine with values
+  const formatDate = (dateStr: string) => {
+    try {
+      return format(new Date(dateStr), 'MMM d')
+    } catch {
+      return dateStr
+    }
+  }
+
+  const hrvData = history.dates.map((date, i) => ({
+    date: formatDate(date),
+    value: history.hrv[i] ?? null,
+    isAnomaly: history.is_anomalous[i] || false,
+  })).filter(d => d.value !== null)
+
+  const rhrData = history.dates.map((date, i) => ({
+    date: formatDate(date),
+    value: history.resting_hr[i] ?? null,
+    isAnomaly: history.is_anomalous[i] || false,
+  })).filter(d => d.value !== null)
+
+  const sleepData = history.dates.map((date, i) => ({
+    date: formatDate(date),
+    value: history.sleep_score[i] ?? null,
+    isAnomaly: history.is_anomalous[i] || false,
+  })).filter(d => d.value !== null)
+
+  const stepsData = history.dates.map((date, i) => ({
+    date: formatDate(date),
+    value: history.steps[i] ?? null,
+    isAnomaly: history.is_anomalous[i] || false,
+  })).filter(d => d.value !== null)
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <TimeSeriesChart
-        title="HRV Trend"
-        data={hrvData}
-        color="#ffffff"
-        unit="ms"
-      />
-      <TimeSeriesChart
-        title="Resting HR Trend"
-        data={rhrData}
-        color="#888888"
-        unit=" bpm"
-      />
-      <TimeSeriesChart
-        title="Sleep Score Trend"
-        data={sleepData}
-        color="#cccccc"
-        unit="/100"
-      />
-      <TimeSeriesChart
-        title="Steps Trend"
-        data={stepsData}
-        color="#aaaaaa"
-        unit=""
-      />
+      <HrvTrendChart data={hrvData} />
+      <RestingHrTrendChart data={rhrData} />
+      <SleepScoreTrendChart data={sleepData} />
+      <StepsTrendChart data={stepsData} />
     </div>
   )
 }
