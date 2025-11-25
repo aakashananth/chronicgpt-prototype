@@ -60,6 +60,10 @@ def run_daily_pipeline(days_back: int = 14) -> Dict[str, Any]:
     # We need to group by date and extract the relevant fields
     daily_data = _transform_metrics_to_dataframe(raw_metrics)
 
+    # Step 4.5: Add patient_id column to the DataFrame
+    patient_id = config.ultrahuman.patient_id
+    daily_data["patient_id"] = patient_id
+
     # Step 5: Rename columns (some may already be correct, but ensure consistency)
     # The columns should be: date, hrv, resting_hr, sleep_score, steps
     column_mapping = {

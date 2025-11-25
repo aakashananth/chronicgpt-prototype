@@ -17,14 +17,19 @@ class UltrahumanConfig:
     api_base_url: str
     api_key: str  # The Authorization token (no "Bearer" prefix)
     email: str
+    patient_id: Optional[str]  # Patient identifier (defaults to email if not set)
 
     @classmethod
     def from_env(cls) -> "UltrahumanConfig":
         """Create UltrahumanConfig from environment variables."""
+        email = os.getenv("ULTRAHUMAN_EMAIL", "")
+        # Use ULTRAHUMAN_PATIENT_ID if set, otherwise default to email
+        patient_id = os.getenv("ULTRAHUMAN_PATIENT_ID", email)
         return cls(
             api_base_url=os.getenv("ULTRAHUMAN_API_BASE_URL", ""),
             api_key=os.getenv("ULTRAHUMAN_API_KEY", ""),
-            email=os.getenv("ULTRAHUMAN_EMAIL", ""),
+            email=email,
+            patient_id=patient_id,
         )
 
 

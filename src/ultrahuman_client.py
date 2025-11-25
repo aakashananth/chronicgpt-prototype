@@ -33,6 +33,7 @@ class UltrahumanClient:
         self.api_base_url = ultrahuman_config.api_base_url.rstrip("/")
         self.api_key = ultrahuman_config.api_key
         self.email = ultrahuman_config.email
+        self.patient_id = ultrahuman_config.patient_id
 
     def get_daily_metrics(
         self, start_date: datetime, end_date: datetime
