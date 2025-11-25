@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { apiClient, PipelineRunResponse } from '@/lib/api'
+import { apiClient, PipelineRunResponse } from '../../lib/api'
 import Card from './Card'
 import Alert from './Alert'
 

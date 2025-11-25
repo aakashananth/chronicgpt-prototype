@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { apiClient, Anomaly } from '@/lib/api'
+import { apiClient, Anomaly } from '../../lib/api'
 
 export default function AnomaliesPage() {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([])

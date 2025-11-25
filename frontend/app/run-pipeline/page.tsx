@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { apiClient, PipelineRunResponse } from '@/lib/api'
+import { apiClient, PipelineRunResponse } from '../../lib/api'
 
 export default function RunPipelinePage() {
   const [daysBack, setDaysBack] = useState(14)
