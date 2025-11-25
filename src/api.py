@@ -3,6 +3,7 @@
 from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional
 
+import pandas as pd
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -399,9 +400,15 @@ async def get_metrics_history(
             patient_id, start_date_obj, end_date_obj
         )
 
+        # Create a complete date range from start_date to end_date (inclusive)
+        date_range = pd.date_range(
+            start=start_date_obj, end=end_date_obj, freq="D"
+        ).date.tolist()
+
         if df.empty:
+            # Return empty arrays for all dates in range
             return {
-                "dates": [],
+                "dates": [d.strftime("%Y-%m-%d") for d in date_range],
                 "hrv": [],
                 "resting_hr": [],
                 "sleep_score": [],
@@ -423,20 +430,47 @@ async def get_metrics_history(
                 "total_records": 0,
             }
 
-        # Ensure date column is sorted
-        if "date" in df.columns:
-            df = df.sort_values("date").reset_index(drop=True)
-            # Convert date to string for JSON serialization
-            dates = df["date"].astype(str).tolist()
-        else:
-            dates = []
+        # Ensure date column exists and is sorted
+        if "date" not in df.columns:
+            raise HTTPException(
+                status_code=500,
+                detail="DataFrame missing 'date' column after loading from storage",
+            )
 
-        # Extract metric arrays
+        # Convert date column to datetime if needed, then to date
+        if df["date"].dtype == "object":
+            df["date"] = pd.to_datetime(df["date"]).dt.date
+        elif hasattr(df["date"].dtype, "tz"):
+            # Handle timezone-aware datetime
+            df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None).dt.date
+
+        # Sort by date
+        df = df.sort_values("date").reset_index(drop=True)
+
+        # Set date as index for alignment
+        df_indexed = df.set_index("date")
+
+        # Reindex to complete date range with forward fill for missing days
+        # This ensures we always return a valid time-series with no gaps
+        # Reindex first, then forward fill missing values (carry last known value forward)
+        # Explicitly specify fill_value=None for reindex, then use ffill() for forward fill
+        df_aligned = df_indexed.reindex(date_range, fill_value=None)
+        # Forward fill missing values - use ffill() instead of deprecated fillna(method="ffill")
+        df_aligned = df_aligned.ffill()
+
+        # Reset index to get date back as a column
+        df_aligned = df_aligned.reset_index()
+        df_aligned.rename(columns={"index": "date"}, inplace=True)
+
+        # Convert dates to strings for JSON serialization
+        dates = [d.strftime("%Y-%m-%d") for d in df_aligned["date"].tolist()]
+
+        # Extract metric arrays with proper null handling
         def get_array(column_name: str, default_value=None):
             """Get array from DataFrame column, using default_value for nulls."""
-            if column_name in df.columns:
-                return df[column_name].fillna(default_value).tolist()
-            return []
+            if column_name in df_aligned.columns:
+                return df_aligned[column_name].fillna(default_value).tolist()
+            return [default_value] * len(dates) if default_value is not None else []
 
         # Build response
         response = {
