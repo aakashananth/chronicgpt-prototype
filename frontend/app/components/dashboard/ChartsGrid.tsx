@@ -57,15 +57,40 @@ export default function ChartsGrid({ days = 30, endDate, refreshKey }: ChartsGri
 
   if (error) {
     return (
-      <div className="text-center py-12">
-        <p className="text-destructive mb-4">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="text-sm text-muted-foreground hover:text-foreground"
-        >
-          Retry
-        </button>
-      </div>
+      <Card>
+        <CardContent className="py-16">
+          <div className="text-center">
+            <BarChart3 className="h-12 w-12 mx-auto mb-4 text-destructive opacity-50" />
+            <h3 className="text-lg font-semibold mb-2 text-destructive">Error Loading Charts</h3>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <button
+              onClick={() => {
+                setError(null)
+                setLoading(true)
+                // Trigger re-fetch
+                const fetchHistory = async () => {
+                  try {
+                    setError(null)
+                    const data = await apiClient.getMetricsHistory({
+                      days,
+                      end_date: endDate || undefined,
+                    })
+                    setHistory(data)
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Failed to fetch metrics history')
+                  } finally {
+                    setLoading(false)
+                  }
+                }
+                fetchHistory()
+              }}
+              className="text-sm text-primary hover:text-primary/80 underline"
+            >
+              Retry
+            </button>
+          </div>
+        </CardContent>
+      </Card>
     )
   }
 
@@ -94,37 +119,68 @@ export default function ChartsGrid({ days = 30, endDate, refreshKey }: ChartsGri
     }
   }
 
+  // Ensure we have valid data before rendering charts
+  if (!history.dates || history.dates.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-16">
+          <div className="text-center">
+            <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-semibold mb-2">No Data Available</h3>
+            <p className="text-muted-foreground mb-4">
+              Run the pipeline to start tracking your health metrics.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   const hrvData = history.dates.map((date, i) => ({
     date: formatDate(date),
     value: history.hrv[i] ?? null,
-    isAnomaly: history.is_anomalous[i] || false,
-  })).filter(d => d.value !== null)
+    isAnomaly: history.is_anomalous?.[i] || false,
+  })).filter(d => d.value !== null && d.value !== undefined)
 
   const rhrData = history.dates.map((date, i) => ({
     date: formatDate(date),
     value: history.resting_hr[i] ?? null,
-    isAnomaly: history.is_anomalous[i] || false,
-  })).filter(d => d.value !== null)
+    isAnomaly: history.is_anomalous?.[i] || false,
+  })).filter(d => d.value !== null && d.value !== undefined)
 
   const sleepData = history.dates.map((date, i) => ({
     date: formatDate(date),
     value: history.sleep_score[i] ?? null,
-    isAnomaly: history.is_anomalous[i] || false,
-  })).filter(d => d.value !== null)
+    isAnomaly: history.is_anomalous?.[i] || false,
+  })).filter(d => d.value !== null && d.value !== undefined)
 
   const stepsData = history.dates.map((date, i) => ({
     date: formatDate(date),
     value: history.steps[i] ?? null,
-    isAnomaly: history.is_anomalous[i] || false,
-  })).filter(d => d.value !== null)
+    isAnomaly: history.is_anomalous?.[i] || false,
+  })).filter(d => d.value !== null && d.value !== undefined)
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <HrvTrendChart data={hrvData} />
-      <RestingHrTrendChart data={rhrData} />
-      <SleepScoreTrendChart data={sleepData} />
-      <StepsTrendChart data={stepsData} />
-    </div>
+      {hrvData.length === 0 && rhrData.length === 0 && sleepData.length === 0 && stepsData.length === 0 ? (
+        <Card>
+          <CardContent className="py-16">
+            <div className="text-center">
+              <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+              <h3 className="text-lg font-semibold mb-2">No Chart Data Available</h3>
+              <p className="text-muted-foreground mb-4">
+                No valid data points found for the selected date range.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {hrvData.length > 0 && <HrvTrendChart data={hrvData} />}
+          {rhrData.length > 0 && <RestingHrTrendChart data={rhrData} />}
+          {sleepData.length > 0 && <SleepScoreTrendChart data={sleepData} />}
+          {stepsData.length > 0 && <StepsTrendChart data={stepsData} />}
+        </div>
+      )}
   )
 }
 

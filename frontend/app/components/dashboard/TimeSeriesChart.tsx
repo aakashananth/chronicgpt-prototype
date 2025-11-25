@@ -88,6 +88,7 @@ export default function TimeSeriesChart({
               strokeWidth={2}
               dot={<CustomDot />}
               activeDot={{ r: 6 }}
+              connectNulls={false}
             />
           </LineChart>
         </ResponsiveContainer>

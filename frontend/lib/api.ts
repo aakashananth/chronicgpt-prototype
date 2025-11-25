@@ -118,9 +118,15 @@ class ApiClient {
 
   async getMetricsHistory(params: { days?: number; end_date?: string }): Promise<MetricsHistoryResponse> {
     const queryParams = new URLSearchParams()
-    if (params.days) queryParams.append('days', params.days.toString())
-    if (params.end_date) queryParams.append('end_date', params.end_date)
-    return this.fetch<MetricsHistoryResponse>(`/pipeline/metrics/history?${queryParams.toString()}`)
+    if (params.days !== undefined && params.days !== null) {
+      queryParams.append('days', params.days.toString())
+    }
+    if (params.end_date) {
+      queryParams.append('end_date', params.end_date)
+    }
+    const queryString = queryParams.toString()
+    const url = `/pipeline/metrics/history${queryString ? `?${queryString}` : ''}`
+    return this.fetch<MetricsHistoryResponse>(url)
   }
 }
 

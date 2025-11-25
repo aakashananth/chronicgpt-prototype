@@ -71,13 +71,14 @@ export default function MetricCard({
         {sparklineData && sparklineData.length > 0 && (
           <div className="mt-3 h-12 w-full opacity-60">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={sparklineData.map((val, i) => ({ value: val, index: i }))}>
+              <LineChart data={sparklineData.map((val, i) => ({ value: val ?? 0, index: i }))}>
                 <Line
                   type="monotone"
                   dataKey="value"
                   stroke="#888888"
                   strokeWidth={1.5}
                   dot={false}
+                  connectNulls={false}
                 />
               </LineChart>
             </ResponsiveContainer>
