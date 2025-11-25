@@ -30,7 +30,7 @@ export default function AnomaliesPanel({ refreshKey }: AnomaliesPanelProps) {
         setExpanded(data.length > 0)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch anomalies')
-        console.error('Failed to fetch anomalies:', err)
+        console.error('Failed to fetch anomalies', err)
       } finally {
         setLoading(false)
       }
@@ -38,6 +38,45 @@ export default function AnomaliesPanel({ refreshKey }: AnomaliesPanelProps) {
 
     fetchAnomalies()
   }, [refreshKey])
+
+  const getFlagBadges = (anomaly: Anomaly) => {
+    const flags = []
+    if (anomaly.low_hrv_flag) flags.push({ label: 'Low HRV', variant: 'destructive' as const, key: 'low_hrv' })
+    if (anomaly.high_rhr_flag) flags.push({ label: 'High RHR', variant: 'destructive' as const, key: 'high_rhr' })
+    if (anomaly.low_sleep_flag) flags.push({ label: 'Low Sleep', variant: 'warning' as const, key: 'low_sleep' })
+    if (anomaly.low_steps_flag) flags.push({ label: 'Low Steps', variant: 'warning' as const, key: 'low_steps' })
+    return flags
+  }
+
+  // Filter anomalies - must be called before any conditional returns
+  const filteredAnomalies = useMemo(() => {
+    return anomalies.filter((anomaly) => {
+      if (severityFilter !== null && (anomaly.anomaly_severity || 0) !== severityFilter) {
+        return false
+      }
+      if (flagFilter) {
+        const flags = getFlagBadges(anomaly)
+        if (!flags.some(f => f.key === flagFilter)) {
+          return false
+        }
+      }
+      return true
+    })
+  }, [anomalies, severityFilter, flagFilter])
+
+  const hasActiveFilters = severityFilter !== null || flagFilter !== null
+
+  const clearFilters = () => {
+    setSeverityFilter(null)
+    setFlagFilter(null)
+  }
+
+  const getSeverityColor = (severity?: number) => {
+    if (!severity) return 'secondary'
+    if (severity >= 3) return 'destructive'
+    if (severity === 2) return 'warning'
+    return 'warning'
+  }
 
   if (loading) {
     return (
@@ -73,44 +112,6 @@ export default function AnomaliesPanel({ refreshKey }: AnomaliesPanelProps) {
     )
   }
 
-  const getSeverityColor = (severity?: number) => {
-    if (!severity) return 'secondary'
-    if (severity >= 3) return 'destructive'
-    if (severity === 2) return 'warning'
-    return 'warning'
-  }
-
-  const getFlagBadges = (anomaly: Anomaly) => {
-    const flags = []
-    if (anomaly.low_hrv_flag) flags.push({ label: 'Low HRV', variant: 'destructive' as const, key: 'low_hrv' })
-    if (anomaly.high_rhr_flag) flags.push({ label: 'High RHR', variant: 'destructive' as const, key: 'high_rhr' })
-    if (anomaly.low_sleep_flag) flags.push({ label: 'Low Sleep', variant: 'warning' as const, key: 'low_sleep' })
-    if (anomaly.low_steps_flag) flags.push({ label: 'Low Steps', variant: 'warning' as const, key: 'low_steps' })
-    return flags
-  }
-
-  // Filter anomalies
-  const filteredAnomalies = useMemo(() => {
-    return anomalies.filter((anomaly) => {
-      if (severityFilter !== null && (anomaly.anomaly_severity || 0) !== severityFilter) {
-        return false
-      }
-      if (flagFilter) {
-        const flags = getFlagBadges(anomaly)
-        if (!flags.some(f => f.key === flagFilter)) {
-          return false
-        }
-      }
-      return true
-    })
-  }, [anomalies, severityFilter, flagFilter])
-
-  const hasActiveFilters = severityFilter !== null || flagFilter !== null
-
-  const clearFilters = () => {
-    setSeverityFilter(null)
-    setFlagFilter(null)
-  }
 
   return (
     <Card>
