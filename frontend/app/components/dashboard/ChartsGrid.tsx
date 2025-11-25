@@ -160,27 +160,29 @@ export default function ChartsGrid({ days = 30, endDate, refreshKey }: ChartsGri
     isAnomaly: history.is_anomalous?.[i] || false,
   })).filter(d => d.value !== null && d.value !== undefined)
 
+  if (hrvData.length === 0 && rhrData.length === 0 && sleepData.length === 0 && stepsData.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-16">
+          <div className="text-center">
+            <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <h3 className="text-lg font-semibold mb-2">No Chart Data Available</h3>
+            <p className="text-muted-foreground mb-4">
+              No valid data points found for the selected date range.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
   return (
-      {hrvData.length === 0 && rhrData.length === 0 && sleepData.length === 0 && stepsData.length === 0 ? (
-        <Card>
-          <CardContent className="py-16">
-            <div className="text-center">
-              <BarChart3 className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-              <h3 className="text-lg font-semibold mb-2">No Chart Data Available</h3>
-              <p className="text-muted-foreground mb-4">
-                No valid data points found for the selected date range.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {hrvData.length > 0 && <HrvTrendChart data={hrvData} />}
-          {rhrData.length > 0 && <RestingHrTrendChart data={rhrData} />}
-          {sleepData.length > 0 && <SleepScoreTrendChart data={sleepData} />}
-          {stepsData.length > 0 && <StepsTrendChart data={stepsData} />}
-        </div>
-      )}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      {hrvData.length > 0 && <HrvTrendChart data={hrvData} />}
+      {rhrData.length > 0 && <RestingHrTrendChart data={rhrData} />}
+      {sleepData.length > 0 && <SleepScoreTrendChart data={sleepData} />}
+      {stepsData.length > 0 && <StepsTrendChart data={stepsData} />}
+    </div>
   )
 }
 
