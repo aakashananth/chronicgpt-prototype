@@ -73,4 +73,8 @@ jobs:
         with:
           app-name: 'health-metrics-api'
           slot-name: 'Production'
+        continue-on-error: false
+        timeout-minutes: 10
+        retry-on-error: true
+        max-attempts: 3
           
