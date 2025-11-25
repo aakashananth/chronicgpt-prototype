@@ -401,9 +401,15 @@ async def get_metrics_history(
         )
 
         # Create a complete date range from start_date to end_date (inclusive)
-        date_range = pd.date_range(
-            start=start_date_obj, end=end_date_obj, freq="D"
-        ).date.tolist()
+        try:
+            date_range = pd.date_range(
+                start=start_date_obj, end=end_date_obj, freq="D"
+            ).date.tolist()
+        except Exception as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid date range: {start_date_obj} to {end_date_obj}. Error: {str(e)}",
+            )
 
         if df.empty:
             # Return empty arrays for all dates in range
@@ -448,15 +454,27 @@ async def get_metrics_history(
         df = df.sort_values("date").reset_index(drop=True)
 
         # Set date as index for alignment
-        df_indexed = df.set_index("date")
+        try:
+            df_indexed = df.set_index("date")
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to set date as index: {str(e)}",
+            )
 
         # Reindex to complete date range with forward fill for missing days
         # This ensures we always return a valid time-series with no gaps
         # Reindex first, then forward fill missing values (carry last known value forward)
         # Explicitly specify fill_value=None for reindex, then use ffill() for forward fill
-        df_aligned = df_indexed.reindex(date_range, fill_value=None)
-        # Forward fill missing values - use ffill() instead of deprecated fillna(method="ffill")
-        df_aligned = df_aligned.ffill()
+        try:
+            df_aligned = df_indexed.reindex(date_range, fill_value=None)
+            # Forward fill missing values - use ffill() instead of deprecated fillna(method="ffill")
+            df_aligned = df_aligned.ffill()
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to reindex DataFrame: {str(e)}",
+            )
 
         # Reset index to get date back as a column
         df_aligned = df_aligned.reset_index()
