@@ -561,4 +561,10 @@ def run_incremental_pipeline(days_back: int = 14) -> Dict[str, Any]:
     # Always store in memory cache as fallback
     memory_cache.store_pipeline_result(result)
 
+    print(
+        f"Info: Incremental pipeline completed. Processed {len(new_dates_processed)} new date(s), "
+        f"found {anomaly_count} anomaly/anomalies, cached {len(curated_blob_paths)} blob path(s).",
+        file=sys.stderr,
+    )
+
     return result
