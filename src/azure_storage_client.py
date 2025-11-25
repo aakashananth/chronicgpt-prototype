@@ -385,9 +385,43 @@ class AzureStorageClient:
                         if start_date <= blob_date <= end_date:
                             # Download blob and load as DataFrame
                             blob_client = container_client.get_blob_client(blob_name)
+                            
+                            # Check blob size first - skip empty/corrupted files
+                            blob_properties = blob_client.get_blob_properties()
+                            if blob_properties.size == 0:
+                                print(
+                                    f"Warning: Skipping empty blob {blob_name} (0 bytes)",
+                                    file=sys.stderr,
+                                )
+                                continue
+                            
                             blob_data = blob_client.download_blob().readall()
-                            df = pd.read_parquet(io.BytesIO(blob_data))
-                            dataframes.append(df)
+                            
+                            # Double-check data size
+                            if len(blob_data) == 0:
+                                print(
+                                    f"Warning: Skipping empty blob {blob_name} (no data)",
+                                    file=sys.stderr,
+                                )
+                                continue
+                            
+                            # Try to read Parquet file
+                            try:
+                                df = pd.read_parquet(io.BytesIO(blob_data))
+                                # Skip if DataFrame is empty
+                                if df.empty:
+                                    print(
+                                        f"Warning: Skipping empty DataFrame from blob {blob_name}",
+                                        file=sys.stderr,
+                                    )
+                                    continue
+                                dataframes.append(df)
+                            except Exception as parquet_error:
+                                print(
+                                    f"Warning: Could not read Parquet file {blob_name}: {parquet_error}. Skipping.",
+                                    file=sys.stderr,
+                                )
+                                continue
                     except (ValueError, IndexError) as e:
                         # Skip invalid date formats
                         print(
@@ -397,7 +431,7 @@ class AzureStorageClient:
                         continue
                     except Exception as e:
                         print(
-                            f"Warning: Could not load blob {blob_name}: {e}",
+                            f"Warning: Could not load blob {blob_name}: {e}. Skipping.",
                             file=sys.stderr,
                         )
                         continue
