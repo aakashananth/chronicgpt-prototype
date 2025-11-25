@@ -116,6 +116,64 @@ health-metrics-llm-prototype/
 └── README.md
 ```
 
+## API Endpoints
+
+The FastAPI application provides several endpoints for running the pipeline and retrieving cached results:
+
+- `POST /pipeline/run`: Run the full daily pipeline (fetches all dates in range)
+- `POST /pipeline/run_incremental`: Run the incremental pipeline (only processes new dates)
+- `GET /pipeline/metrics`: Get cached metrics
+- `GET /pipeline/anomalies`: Get cached anomalies
+- `GET /pipeline/explanation`: Get cached LLM explanation
+- `GET /pipeline/blob-path`: Get cached blob path
+
+### Incremental Pipeline Endpoint
+
+The `/pipeline/run_incremental` endpoint is designed for scheduled execution (e.g., every 5-10 minutes) to automatically ingest new health metrics data as it becomes available.
+
+#### What it does
+
+- **Idempotent operation**: The endpoint checks which dates already exist in Azure Blob Storage under `curated/daily_metrics/patient_id={patient_id}/` and only fetches and processes missing dates within the specified `days_back` window.
+- **Efficient processing**: Only new dates are fetched from the Ultrahuman API, transformed, analyzed for anomalies, and uploaded to storage.
+- **Automatic caching**: Results are automatically cached in Redis (if configured) and in-memory cache, making them immediately available via the GET endpoints.
+
+#### Recommended Schedule
+
+- **Every 5-10 minutes**: Since the Ultrahuman API provides daily aggregated metrics, the main benefit of frequent runs is to ensure "today's" daily metrics are picked up as soon as they become available.
+- The endpoint is safe to run frequently because it skips dates that have already been processed.
+
+#### Example Usage
+
+**Using curl:**
+
+```bash
+curl -X POST "https://<your-api>.azurewebsites.net/pipeline/run_incremental?days_back=14"
+```
+
+**Using GitHub Actions (example workflow):**
+
+```yaml
+name: Incremental Pipeline
+
+on:
+  schedule:
+    # Run every 10 minutes
+    - cron: '*/10 * * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  run-incremental:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Incremental Pipeline
+        run: |
+          curl -X POST "${{ secrets.API_BASE_URL }}/pipeline/run_incremental?days_back=14"
+```
+
+**Using Azure Logic Apps or Vercel Cron:**
+
+Configure your scheduler to make a POST request to `/pipeline/run_incremental?days_back=14` at your desired interval.
+
 ## Frontend Application
 
 A modern Next.js 14 frontend application is available in the `frontend/` directory.
