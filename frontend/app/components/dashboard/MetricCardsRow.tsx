@@ -24,7 +24,17 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
         const data = await apiClient.getMetricsHistory({ days: 7 })
         setHistory(data)
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch metrics')
+        let errorMessage = 'Failed to fetch metrics'
+        if (err instanceof Error) {
+          errorMessage = err.message
+          // Check if it's a patient_id configuration error
+          if (err.message.includes('patient_id') || err.message.includes('not configured')) {
+            errorMessage = 'Backend configuration error: patient_id not set. Please configure ULTRAHUMAN_PATIENT_ID or ULTRAHUMAN_EMAIL in Azure App Service settings.'
+          } else if (err.message.includes('400')) {
+            errorMessage = 'Bad request: Check backend configuration and ensure patient_id is set.'
+          }
+        }
+        setError(errorMessage)
         console.error('Failed to fetch metrics:', err)
       } finally {
         setLoading(false)
@@ -63,12 +73,12 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
     )
   }
 
-  // Get today's values (last entry in arrays)
+  // Get today's values (last entry in arrays) - handle null values
   const lastIndex = history.dates.length - 1
-  const todayHrv = history.hrv[lastIndex]
-  const todayRhr = history.resting_hr[lastIndex]
-  const todaySleep = history.sleep_score[lastIndex]
-  const todaySteps = history.steps[lastIndex]
+  const todayHrv = history.hrv?.[lastIndex] ?? null
+  const todayRhr = history.resting_hr?.[lastIndex] ?? null
+  const todaySleep = history.sleep_score?.[lastIndex] ?? null
+  const todaySteps = history.steps?.[lastIndex] ?? null
 
   // Calculate trends (compare last value with average of previous 6 days)
   const calculateTrend = (values: number[], currentIndex: number): number | null => {
@@ -80,15 +90,23 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
     return ((current - avg) / avg) * 100
   }
 
-  const hrvTrend = calculateTrend(history.hrv, lastIndex)
-  const rhrTrend = calculateTrend(history.resting_hr, lastIndex)
-  const sleepTrend = calculateTrend(history.sleep_score, lastIndex)
-  const stepsTrend = calculateTrend(history.steps, lastIndex)
+  // Filter out null values for trend calculation
+  const hrvValues = (history.hrv || []).filter((v): v is number => v !== null && v !== undefined && !isNaN(v))
+  const rhrValues = (history.resting_hr || []).filter((v): v is number => v !== null && v !== undefined && !isNaN(v))
+  const sleepValues = (history.sleep_score || []).filter((v): v is number => v !== null && v !== undefined && !isNaN(v))
+  const stepsValues = (history.steps || []).filter((v): v is number => v !== null && v !== undefined && !isNaN(v))
+  
+  const hrvTrend = hrvValues.length > 1 ? calculateTrend(hrvValues, hrvValues.length - 1) : null
+  const rhrTrend = rhrValues.length > 1 ? calculateTrend(rhrValues, rhrValues.length - 1) : null
+  const sleepTrend = sleepValues.length > 1 ? calculateTrend(sleepValues, sleepValues.length - 1) : null
+  const stepsTrend = stepsValues.length > 1 ? calculateTrend(stepsValues, stepsValues.length - 1) : null
 
-  // Get last 7 values for sparklines
+  // Get last 7 values for sparklines - filter out null/undefined values
   const getSparklineData = (values: number[], currentIndex: number): number[] => {
     const start = Math.max(0, currentIndex - 6)
-    return values.slice(start, currentIndex + 1)
+    return values
+      .slice(start, currentIndex + 1)
+      .filter((v): v is number => v !== null && v !== undefined && !isNaN(v))
   }
 
   return (
