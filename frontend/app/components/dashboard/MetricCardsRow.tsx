@@ -189,10 +189,17 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
     )
   })
 
+  // Determine the section title based on what's being shown
+  const sectionTitle = isToday && !isSelected 
+    ? "Today's Snapshot"
+    : isSelected
+    ? `Snapshot for ${displayDateFormatted}`
+    : "Most Recent Snapshot"
+
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
-        <h2 className="text-xl font-semibold text-foreground">Today's Snapshot</h2>
+        <h2 className="text-xl font-semibold text-foreground">{sectionTitle}</h2>
         <div className="flex items-center gap-3">
           <div className="text-sm text-muted-foreground">
             {isToday && !isSelected ? (

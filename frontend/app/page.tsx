@@ -35,11 +35,8 @@ export default function Dashboard() {
             <ControlStatusRow onPipelineRun={handlePipelineRun} />
           </section>
 
-          {/* Today's Snapshot Cards */}
+          {/* Snapshot Cards */}
           <section>
-            <h2 className="text-xl font-semibold mb-4 text-foreground">
-              Today's Snapshot
-            </h2>
             <MetricCardsRow refreshKey={refreshKey} />
           </section>
 
