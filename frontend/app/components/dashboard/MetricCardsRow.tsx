@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiClient, MetricsHistoryResponse } from '@/lib/api'
 import { Card, CardContent } from '@/components/ui/card'
 import MetricCard from './MetricCard'
-import { Activity, Heart, Moon, Footprints, TrendingUp, TrendingDown } from 'lucide-react'
+import { Activity, Heart, Moon, Footprints, TrendingUp, TrendingDown, Calendar } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
 interface MetricCardsRowProps {
@@ -212,18 +212,21 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
           </div>
           {availableDates.length > 0 && (
             <div className="flex items-center gap-2">
-              <label htmlFor="snapshot-date-picker" className="text-xs text-muted-foreground">
+              <label htmlFor="snapshot-date-picker" className="text-xs text-muted-foreground flex items-center gap-1">
+                <Calendar className="h-3 w-3" />
                 Select date:
               </label>
-              <input
-                id="snapshot-date-picker"
-                type="date"
-                value={selectedDate || displayDate}
-                onChange={(e) => setSelectedDate(e.target.value || null)}
-                min={availableDates[0]}
-                max={availableDates[availableDates.length - 1]}
-                className="bg-background border border-border rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
+              <div className="relative">
+                <input
+                  id="snapshot-date-picker"
+                  type="date"
+                  value={selectedDate || displayDate}
+                  onChange={(e) => setSelectedDate(e.target.value || null)}
+                  min={availableDates[0]}
+                  max={availableDates[availableDates.length - 1]}
+                  className="bg-background border border-border rounded-md px-2 py-1 pr-8 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:brightness-0 [&::-webkit-calendar-picker-indicator]:contrast-100"
+                />
+              </div>
               {selectedDate && (
                 <button
                   onClick={() => setSelectedDate(null)}
@@ -248,7 +251,8 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
         <MetricCard
           title="Resting HR"
           value={todayRhr}
-          trend={rhrTrend ? -rhrTrend : null}
+          trend={rhrTrend}
+          invertTrend={true}
           icon={<Heart className="h-5 w-5" />}
           formatValue={(val) => `${val.toFixed(0)} bpm`}
           sparklineData={getSparklineData(history.resting_hr, lastIndex)}
