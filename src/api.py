@@ -401,117 +401,123 @@ async def get_metrics_history(
         )
 
         # Create a complete date range from start_date to end_date (inclusive)
-        try:
-            date_range = pd.date_range(
-                start=start_date_obj, end=end_date_obj, freq="D"
-            ).date.tolist()
-        except Exception as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid date range: {start_date_obj} to {end_date_obj}. Error: {str(e)}",
-            )
+        date_range = []
+        current_date = start_date_obj
+        while current_date <= end_date_obj:
+            date_range.append(current_date)
+            current_date += timedelta(days=1)
 
-        if df.empty:
-            # Return empty arrays for all dates in range
-            return {
-                "dates": [d.strftime("%Y-%m-%d") for d in date_range],
-                "hrv": [],
-                "resting_hr": [],
-                "sleep_score": [],
-                "steps": [],
-                "recovery_index": [],
-                "movement_index": [],
-                "active_minutes": [],
-                "vo2_max": [],
-                "low_hrv_flag": [],
-                "high_rhr_flag": [],
-                "low_sleep_flag": [],
-                "low_steps_flag": [],
-                "is_anomalous": [],
-                "anomaly_severity": [],
-                "date_range": {
-                    "start": start_date_obj.strftime("%Y-%m-%d"),
-                    "end": end_date_obj.strftime("%Y-%m-%d"),
-                },
-                "total_records": 0,
-            }
+        # Build a dictionary mapping date -> row data for fast lookup
+        date_to_data = {}
+        if not df.empty and "date" in df.columns:
+            # Convert date column to date type if needed
+            if df["date"].dtype == "object":
+                df["date"] = pd.to_datetime(df["date"]).dt.date
+            elif hasattr(df["date"].dtype, "tz"):
+                df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None).dt.date
+            
+            # Convert DataFrame rows to dictionary by date
+            for _, row in df.iterrows():
+                row_date = row["date"]
+                if isinstance(row_date, str):
+                    row_date = datetime.strptime(row_date, "%Y-%m-%d").date()
+                date_to_data[row_date] = row.to_dict()
 
-        # Ensure date column exists and is sorted
-        if "date" not in df.columns:
-            raise HTTPException(
-                status_code=500,
-                detail="DataFrame missing 'date' column after loading from storage",
-            )
+        # Build arrays by iterating through date range with forward fill
+        dates = []
+        hrv_values = []
+        resting_hr_values = []
+        sleep_score_values = []
+        steps_values = []
+        recovery_index_values = []
+        movement_index_values = []
+        active_minutes_values = []
+        vo2_max_values = []
+        low_hrv_flag_values = []
+        high_rhr_flag_values = []
+        low_sleep_flag_values = []
+        low_steps_flag_values = []
+        is_anomalous_values = []
+        anomaly_severity_values = []
 
-        # Convert date column to datetime if needed, then to date
-        if df["date"].dtype == "object":
-            df["date"] = pd.to_datetime(df["date"]).dt.date
-        elif hasattr(df["date"].dtype, "tz"):
-            # Handle timezone-aware datetime
-            df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None).dt.date
+        # Track last known values for forward fill
+        last_values = {
+            "hrv": None,
+            "resting_hr": None,
+            "sleep_score": None,
+            "steps": None,
+            "recovery_index": None,
+            "movement_index": None,
+            "active_minutes": None,
+            "vo2_max": None,
+            "low_hrv_flag": False,
+            "high_rhr_flag": False,
+            "low_sleep_flag": False,
+            "low_steps_flag": False,
+            "is_anomalous": False,
+            "anomaly_severity": 0,
+        }
 
-        # Sort by date
-        df = df.sort_values("date").reset_index(drop=True)
-
-        # Set date as index for alignment
-        try:
-            df_indexed = df.set_index("date")
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to set date as index: {str(e)}",
-            )
-
-        # Reindex to complete date range with forward fill for missing days
-        # This ensures we always return a valid time-series with no gaps
-        # Reindex first, then forward fill missing values (carry last known value forward)
-        # Explicitly specify fill_value=None for reindex, then use ffill() for forward fill
-        try:
-            df_aligned = df_indexed.reindex(date_range, fill_value=None)
-            # Forward fill missing values - use ffill() instead of deprecated fillna(method="ffill")
-            df_aligned = df_aligned.ffill()
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to reindex DataFrame: {str(e)}",
-            )
-
-        # Reset index to get date back as a column
-        df_aligned = df_aligned.reset_index()
-        df_aligned.rename(columns={"index": "date"}, inplace=True)
-
-        # Convert dates to strings for JSON serialization
-        dates = [d.strftime("%Y-%m-%d") for d in df_aligned["date"].tolist()]
-
-        # Extract metric arrays with proper null handling
-        def get_array(column_name: str, default_value=None):
-            """Get array from DataFrame column, using default_value for nulls."""
-            if column_name in df_aligned.columns:
-                return df_aligned[column_name].fillna(default_value).tolist()
-            return [default_value] * len(dates) if default_value is not None else []
+        for date_obj in date_range:
+            dates.append(date_obj.strftime("%Y-%m-%d"))
+            
+            # Get data for this date, or use forward-filled values
+            if date_obj in date_to_data:
+                row = date_to_data[date_obj]
+                # Update last known values
+                last_values["hrv"] = row.get("hrv")
+                last_values["resting_hr"] = row.get("resting_hr")
+                last_values["sleep_score"] = row.get("sleep_score")
+                last_values["steps"] = row.get("steps")
+                last_values["recovery_index"] = row.get("recovery_index")
+                last_values["movement_index"] = row.get("movement_index")
+                last_values["active_minutes"] = row.get("active_minutes")
+                last_values["vo2_max"] = row.get("vo2_max")
+                last_values["low_hrv_flag"] = bool(row.get("low_hrv_flag", False))
+                last_values["high_rhr_flag"] = bool(row.get("high_rhr_flag", False))
+                last_values["low_sleep_flag"] = bool(row.get("low_sleep_flag", False))
+                last_values["low_steps_flag"] = bool(row.get("low_steps_flag", False))
+                last_values["is_anomalous"] = bool(row.get("is_anomalous", False))
+                last_values["anomaly_severity"] = int(row.get("anomaly_severity", 0))
+            
+            # Append values (use forward-filled if no data for this date)
+            hrv_values.append(last_values["hrv"])
+            resting_hr_values.append(last_values["resting_hr"])
+            sleep_score_values.append(last_values["sleep_score"])
+            steps_values.append(last_values["steps"])
+            recovery_index_values.append(last_values["recovery_index"])
+            movement_index_values.append(last_values["movement_index"])
+            active_minutes_values.append(last_values["active_minutes"])
+            vo2_max_values.append(last_values["vo2_max"])
+            low_hrv_flag_values.append(last_values["low_hrv_flag"])
+            high_rhr_flag_values.append(last_values["high_rhr_flag"])
+            low_sleep_flag_values.append(last_values["low_sleep_flag"])
+            low_steps_flag_values.append(last_values["low_steps_flag"])
+            is_anomalous_values.append(last_values["is_anomalous"])
+            anomaly_severity_values.append(last_values["anomaly_severity"])
 
         # Build response
         response = {
             "dates": dates,
-            "hrv": get_array("hrv"),
-            "resting_hr": get_array("resting_hr"),
-            "sleep_score": get_array("sleep_score"),
-            "steps": get_array("steps"),
-            "recovery_index": get_array("recovery_index", None),
-            "movement_index": get_array("movement_index", None),
-            "active_minutes": get_array("active_minutes", None),
-            "vo2_max": get_array("vo2_max", None),
-            "low_hrv_flag": get_array("low_hrv_flag", False),
-            "high_rhr_flag": get_array("high_rhr_flag", False),
-            "low_sleep_flag": get_array("low_sleep_flag", False),
-            "low_steps_flag": get_array("low_steps_flag", False),
-            "is_anomalous": get_array("is_anomalous", False),
-            "anomaly_severity": get_array("anomaly_severity", 0),
+            "hrv": hrv_values,
+            "resting_hr": resting_hr_values,
+            "sleep_score": sleep_score_values,
+            "steps": steps_values,
+            "recovery_index": recovery_index_values,
+            "movement_index": movement_index_values,
+            "active_minutes": active_minutes_values,
+            "vo2_max": vo2_max_values,
+            "low_hrv_flag": low_hrv_flag_values,
+            "high_rhr_flag": high_rhr_flag_values,
+            "low_sleep_flag": low_sleep_flag_values,
+            "low_steps_flag": low_steps_flag_values,
+            "is_anomalous": is_anomalous_values,
+            "anomaly_severity": anomaly_severity_values,
             "date_range": {
                 "start": start_date_obj.strftime("%Y-%m-%d"),
                 "end": end_date_obj.strftime("%Y-%m-%d"),
             },
-            "total_records": len(df),
+            "total_records": len(date_to_data),  # Count of actual data points, not date range length
         }
 
         return response
