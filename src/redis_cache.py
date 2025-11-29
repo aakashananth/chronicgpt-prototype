@@ -39,7 +39,7 @@ class RedisCacheClient:
 
         if self._redis_client is None:
             try:
-                # Azure Redis Cache connection parameters
+                # Azure Redis Cache connection parameters with shorter timeouts
                 self._redis_client = redis.Redis(
                     host=self.host,
                     port=self.port,
@@ -47,12 +47,20 @@ class RedisCacheClient:
                     ssl=self.ssl,
                     ssl_cert_reqs=None,
                     decode_responses=True,
-                    socket_connect_timeout=10,
-                    socket_timeout=10,
+                    socket_connect_timeout=3,  # Reduced from 10 to 3 seconds
+                    socket_timeout=3,  # Reduced from 10 to 3 seconds
+                    retry_on_timeout=False,  # Don't retry on timeout
+                    health_check_interval=30,  # Check connection health every 30s
                 )
-                # Test connection with a short timeout
-                self._redis_client.ping()
-            except TimeoutError as e:
+                # Test connection with a very short timeout
+                # Use a separate connection for ping to avoid blocking
+                try:
+                    self._redis_client.ping()
+                except (TimeoutError, redis.ConnectionError, redis.TimeoutError):
+                    # If ping fails, mark client as None so we don't use it
+                    self._redis_client = None
+                    raise
+            except (TimeoutError, redis.TimeoutError) as e:
                 print(f"Warning: Redis connection timeout: {e}")
                 print(f"  Host: {self.host}, Port: {self.port}")
                 print(f"  This usually means:")
@@ -100,12 +108,12 @@ class RedisCacheClient:
                 # Store enriched DataFrame as JSON (simplified)
                 cache_data["enriched"] = "DataFrame cached separately"
 
-            # Store as JSON string
+            # Store as JSON string with timeout handling
             redis_client.setex(
                 cache_key, 86400, json.dumps(cache_data, default=str)
             )  # 24 hour TTL
 
-            # Cache individual components
+            # Cache individual components (these will fail gracefully if Redis is down)
             if "recent_anomalies" in result:
                 self._cache_value("cached_anomalies", result["recent_anomalies"])
             if "explanation" in result:
@@ -114,7 +122,9 @@ class RedisCacheClient:
                 self._cache_value("cached_blob_path", result["blob_path"])
 
             return True
-        except (RedisError, json.JSONEncodeError) as e:
+        except (RedisError, TimeoutError, redis.TimeoutError, redis.ConnectionError, json.JSONEncodeError) as e:
+            # Mark client as None so we don't retry with a bad connection
+            self._redis_client = None
             print(f"Warning: Failed to cache pipeline result: {e}")
             return False
 
@@ -138,7 +148,9 @@ class RedisCacheClient:
             if cached_data:
                 return json.loads(cached_data)
             return None
-        except (RedisError, TimeoutError, json.JSONDecodeError):
+        except (RedisError, TimeoutError, redis.TimeoutError, redis.ConnectionError, json.JSONDecodeError):
+            # Mark client as None so we don't retry with a bad connection
+            self._redis_client = None
             return None
 
     def get_cached_anomalies(self) -> Optional[List[Dict[str, Any]]]:
@@ -186,7 +198,9 @@ class RedisCacheClient:
             else:
                 redis_client.setex(key, ttl, str(value))
             return True
-        except (RedisError, json.JSONEncodeError):
+        except (RedisError, TimeoutError, redis.TimeoutError, redis.ConnectionError, json.JSONEncodeError):
+            # Mark client as None so we don't retry with a bad connection
+            self._redis_client = None
             return False
 
     def _get_cached_value(self, key: str) -> Optional[Any]:
@@ -212,5 +226,7 @@ class RedisCacheClient:
                 return json.loads(cached_value)
             except json.JSONDecodeError:
                 return cached_value
-        except (RedisError, TimeoutError):
+        except (RedisError, TimeoutError, redis.TimeoutError, redis.ConnectionError):
+            # Mark client as None so we don't retry with a bad connection
+            self._redis_client = None
             return None

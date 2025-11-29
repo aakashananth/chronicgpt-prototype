@@ -76,7 +76,7 @@ async def redis_health_check():
     """Check Redis connection status."""
     import redis
     from redis.exceptions import RedisError, TimeoutError
-    
+
     redis_client = cache_client._get_redis_client()
 
     if not cache_client.host or not cache_client.password:
@@ -113,7 +113,7 @@ async def redis_health_check():
             error_details = f"Authentication Error: {str(e)} - Check REDIS_ACCESS_KEY"
         except Exception as e:
             error_details = f"{type(e).__name__}: {str(e)}"
-        
+
         return {
             "status": "connection_failed",
             "message": "Redis connection failed. Check your credentials and network.",
@@ -150,6 +150,89 @@ async def redis_health_check():
         }
 
 
+@app.get("/health/redis/diagnostics")
+async def redis_diagnostics():
+    """Get detailed Redis diagnostics and troubleshooting steps."""
+    import socket
+
+    diagnostics = {
+        "redis_config": {
+            "host": cache_client.host or "not set",
+            "port": cache_client.port,
+            "ssl": cache_client.ssl,
+            "password_set": bool(cache_client.password),
+        },
+        "troubleshooting_steps": [
+            {
+                "step": 1,
+                "title": "Check Redis Public Network Access",
+                "instructions": [
+                    "Go to Azure Portal → Redis Cache → 'health-metrics-redis'",
+                    "Look for 'Firewall' or 'Access' in the left menu (Basic/Standard tier)",
+                    "OR look for 'Networking' in the left menu (Premium tier)",
+                    "Verify 'Public network access' is set to 'Enabled'",
+                    "If it's 'Disabled', enable it and save",
+                ],
+            },
+            {
+                "step": 2,
+                "title": "Find App Service Outbound IPs",
+                "instructions": [
+                    "Go to Azure Portal → App Services → 'health-metrics-api-bhbsebdvhfgxd4gf'",
+                    "Click on 'Properties' in the left menu",
+                    "Copy ALL 'Outbound IP addresses' (there may be multiple)",
+                    "These are the IPs that need to be whitelisted in Redis firewall",
+                ],
+            },
+            {
+                "step": 3,
+                "title": "Add Firewall Rules",
+                "instructions": [
+                    "Go back to Redis Cache → 'health-metrics-redis'",
+                    "Go to 'Firewall' or 'Networking' → 'Firewall rules'",
+                    "Add each App Service outbound IP from step 2",
+                    "OR add '0.0.0.0 - 255.255.255.255' for testing (less secure)",
+                    "Click 'Save' and wait 2-3 minutes for propagation",
+                ],
+            },
+            {
+                "step": 4,
+                "title": "Check Redis Tier and VNet",
+                "instructions": [
+                    "In Redis Cache Overview page, check the 'Pricing tier'",
+                    "If it shows 'Premium' and mentions 'Virtual Network', that's the issue",
+                    "Premium Redis in VNet requires App Service VNet integration",
+                    "Consider moving to Standard tier or enabling VNet integration",
+                ],
+            },
+        ],
+        "connection_test": None,
+    }
+
+    # Try to get more connection details
+    if cache_client.host and cache_client.password:
+        try:
+            # Try DNS resolution
+            socket.gethostbyname(cache_client.host)
+            diagnostics["connection_test"] = {
+                "dns_resolution": "success",
+                "host_resolves": True,
+            }
+        except socket.gaierror:
+            diagnostics["connection_test"] = {
+                "dns_resolution": "failed",
+                "host_resolves": False,
+                "note": "DNS resolution failed - check hostname",
+            }
+        except Exception as e:
+            diagnostics["connection_test"] = {
+                "dns_resolution": "error",
+                "error": str(e),
+            }
+
+    return diagnostics
+
+
 @app.post("/pipeline/run")
 async def run_pipeline(days_back: int = 14) -> Dict[str, Any]:
     """Run the daily health metrics pipeline.
@@ -161,11 +244,12 @@ async def run_pipeline(days_back: int = 14) -> Dict[str, Any]:
         Pipeline results including enriched data, anomalies, explanation, and paths.
     """
     try:
-        # Run pipeline
+        # Run pipeline (this already handles Redis caching internally)
         result = run_daily_pipeline(days_back=days_back)
 
-        # Cache the result
-        cache_client.cache_pipeline_result(result)
+        # Note: Redis caching is already handled inside run_daily_pipeline()
+        # We don't need to cache again here, which prevents redundant Redis calls
+        # that could block the request if Redis is down
 
         # Prepare response (exclude DataFrame for JSON serialization)
         response = {
@@ -197,11 +281,12 @@ async def run_incremental_pipeline_endpoint(days_back: int = 14) -> Dict[str, An
         Pipeline results including new dates processed, anomalies, explanation, and paths.
     """
     try:
-        # Run incremental pipeline
+        # Run incremental pipeline (this already handles Redis caching internally)
         result = run_incremental_pipeline(days_back=days_back)
 
-        # Cache the result (already done in run_incremental_pipeline, but ensure it's cached)
-        cache_client.cache_pipeline_result(result)
+        # Note: Redis caching is already handled inside run_incremental_pipeline()
+        # We don't need to cache again here, which prevents redundant Redis calls
+        # that could block the request if Redis is down
 
         # Prepare response (exclude DataFrame for JSON serialization)
         response = {
@@ -443,7 +528,7 @@ async def get_metrics_history(
                 df["date"] = pd.to_datetime(df["date"]).dt.date
             elif hasattr(df["date"].dtype, "tz"):
                 df["date"] = pd.to_datetime(df["date"]).dt.tz_localize(None).dt.date
-            
+
             # Convert DataFrame rows to dictionary by date
             for _, row in df.iterrows():
                 row_date = row["date"]
@@ -488,7 +573,7 @@ async def get_metrics_history(
 
         for date_obj in date_range:
             dates.append(date_obj.strftime("%Y-%m-%d"))
-            
+
             # Get data for this date, or use forward-filled values
             if date_obj in date_to_data:
                 row = date_to_data[date_obj]
@@ -507,7 +592,7 @@ async def get_metrics_history(
                 last_values["low_steps_flag"] = bool(row.get("low_steps_flag", False))
                 last_values["is_anomalous"] = bool(row.get("is_anomalous", False))
                 last_values["anomaly_severity"] = int(row.get("anomaly_severity", 0))
-            
+
             # Append values (use forward-filled if no data for this date)
             hrv_values.append(last_values["hrv"])
             resting_hr_values.append(last_values["resting_hr"])
@@ -545,7 +630,9 @@ async def get_metrics_history(
                 "start": start_date_obj.strftime("%Y-%m-%d"),
                 "end": end_date_obj.strftime("%Y-%m-%d"),
             },
-            "total_records": len(date_to_data),  # Count of actual data points, not date range length
+            "total_records": len(
+                date_to_data
+            ),  # Count of actual data points, not date range length
         }
 
         return response
