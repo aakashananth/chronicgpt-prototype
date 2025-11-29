@@ -8,6 +8,13 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   title: 'Health Metrics LLM Dashboard',
   description: 'Ultrahuman + Azure OpenAI prototype',
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-healthmetrics.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/favicon-healthmetrics.svg',
+  },
 }
 
 export default function RootLayout({
