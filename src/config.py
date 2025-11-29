@@ -97,11 +97,13 @@ class RedisConfig:
     @classmethod
     def from_env(cls) -> "RedisConfig":
         """Create RedisConfig from environment variables."""
+        # Support both REDIS_SSL and REDIS_USE_SSL for backward compatibility
+        ssl_value = os.getenv("REDIS_SSL") or os.getenv("REDIS_USE_SSL", "true")
         return cls(
             host=os.getenv("REDIS_HOST", ""),
             port=int(os.getenv("REDIS_PORT", "6380")),
             password=os.getenv("REDIS_ACCESS_KEY", ""),
-            ssl=os.getenv("REDIS_SSL", "true").lower() == "true",
+            ssl=ssl_value.lower() == "true",
         )
 
 

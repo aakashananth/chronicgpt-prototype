@@ -68,7 +68,7 @@ class RedisCacheClient:
                 self._redis_client = None
             except redis.AuthenticationError as e:
                 print(f"Warning: Redis authentication failed: {e}")
-                print(f"  Check your REDIS_ACCESS_KEY or REDIS_PASSWORD in .env")
+                print(f"  Check your REDIS_ACCESS_KEY in .env (this is the Primary/Secondary key from Azure Redis Cache)")
                 self._redis_client = None
             except Exception as e:
                 print(f"Warning: Redis error: {type(e).__name__}: {e}")

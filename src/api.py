@@ -74,6 +74,9 @@ async def health_check():
 @app.get("/health/redis")
 async def redis_health_check():
     """Check Redis connection status."""
+    import redis
+    from redis.exceptions import RedisError, TimeoutError
+    
     redis_client = cache_client._get_redis_client()
 
     if not cache_client.host or not cache_client.password:
@@ -88,9 +91,33 @@ async def redis_health_check():
         }
 
     if redis_client is None:
+        # Try to get more detailed error by attempting connection directly
+        error_details = None
+        try:
+            test_client = redis.Redis(
+                host=cache_client.host,
+                port=cache_client.port,
+                password=cache_client.password,
+                ssl=cache_client.ssl,
+                ssl_cert_reqs=None,
+                decode_responses=True,
+                socket_connect_timeout=5,
+                socket_timeout=5,
+            )
+            test_client.ping()
+        except TimeoutError as e:
+            error_details = f"Timeout: {str(e)} - Firewall or network issue"
+        except redis.ConnectionError as e:
+            error_details = f"Connection Error: {str(e)}"
+        except redis.AuthenticationError as e:
+            error_details = f"Authentication Error: {str(e)} - Check REDIS_ACCESS_KEY"
+        except Exception as e:
+            error_details = f"{type(e).__name__}: {str(e)}"
+        
         return {
             "status": "connection_failed",
             "message": "Redis connection failed. Check your credentials and network.",
+            "error_details": error_details,
             "config": {
                 "host": cache_client.host,
                 "port": cache_client.port,
@@ -114,6 +141,7 @@ async def redis_health_check():
         return {
             "status": "error",
             "message": f"Redis connection error: {str(e)}",
+            "error_type": type(e).__name__,
             "config": {
                 "host": cache_client.host,
                 "port": cache_client.port,
