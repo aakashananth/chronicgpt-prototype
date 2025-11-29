@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { apiClient, MetricsHistoryResponse } from '@/lib/api'
 import { Card, CardContent } from '@/components/ui/card'
 import MetricCard from './MetricCard'
-import { Activity, Heart, Moon, Footprints, TrendingUp, TrendingDown, Calendar } from 'lucide-react'
+import { Activity, Heart, Moon, Footprints, Calendar } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
 interface MetricCardsRowProps {
@@ -147,32 +147,33 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
     ? format(parseISO(displayDate), 'MMM d, yyyy')
     : 'No data'
 
-  // Use the overall last index for sparklines (use last date in range)
-  const lastIndex = history.dates.length - 1
-
-  // Calculate trends (compare last value with average of previous 6 days)
-  const calculateTrend = (values: number[], currentIndex: number): number | null => {
-    if (currentIndex < 1 || values.length < 2) return null
+  // Calculate trends for the selected date (compare selected date value with average of previous 6 days)
+  const calculateTrend = (values: (number | null)[], currentIndex: number): number | null => {
+    if (currentIndex < 1) return null
     const current = values[currentIndex]
-    const previous = values.slice(0, currentIndex)
+    if (current === null || current === undefined || isNaN(current)) return null
+    
+    // Get previous 6 days (or as many as available) up to but not including currentIndex
+    const start = Math.max(0, currentIndex - 6)
+    const previous = values.slice(start, currentIndex).filter((v): v is number => 
+      v !== null && v !== undefined && !isNaN(v)
+    )
+    
+    if (previous.length === 0) return null
     const avg = previous.reduce((a, b) => a + b, 0) / previous.length
     if (avg === 0) return null
     return ((current - avg) / avg) * 100
   }
-
-  // Filter out null values for trend calculation
-  const hrvValues = (history.hrv || []).filter((v): v is number => v !== null && v !== undefined && !isNaN(v))
-  const rhrValues = (history.resting_hr || []).filter((v): v is number => v !== null && v !== undefined && !isNaN(v))
-  const sleepValues = (history.sleep_score || []).filter((v): v is number => v !== null && v !== undefined && !isNaN(v))
-  const stepsValues = (history.steps || []).filter((v): v is number => v !== null && v !== undefined && !isNaN(v))
   
-  const hrvTrend = hrvValues.length > 1 ? calculateTrend(hrvValues, hrvValues.length - 1) : null
-  const rhrTrend = rhrValues.length > 1 ? calculateTrend(rhrValues, rhrValues.length - 1) : null
-  const sleepTrend = sleepValues.length > 1 ? calculateTrend(sleepValues, sleepValues.length - 1) : null
-  const stepsTrend = stepsValues.length > 1 ? calculateTrend(stepsValues, stepsValues.length - 1) : null
+  // Calculate trends for the selected date (displayDateIndex)
+  const hrvTrend = displayDateIndex >= 0 ? calculateTrend(history.hrv || [], displayDateIndex) : null
+  const rhrTrend = displayDateIndex >= 0 ? calculateTrend(history.resting_hr || [], displayDateIndex) : null
+  const sleepTrend = displayDateIndex >= 0 ? calculateTrend(history.sleep_score || [], displayDateIndex) : null
+  const stepsTrend = displayDateIndex >= 0 ? calculateTrend(history.steps || [], displayDateIndex) : null
 
-  // Get last 7 values for sparklines - filter out null/undefined values
-  const getSparklineData = (values: number[], currentIndex: number): number[] => {
+  // Get last 7 values for sparklines up to the selected date
+  const getSparklineData = (values: (number | null)[], currentIndex: number): number[] => {
+    if (currentIndex < 0) return []
     const start = Math.max(0, currentIndex - 6)
     return values
       .slice(start, currentIndex + 1)
@@ -198,9 +199,9 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-4">
         <h2 className="text-xl font-semibold text-foreground">{sectionTitle}</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
           <div className="text-sm text-muted-foreground">
             {isToday && !isSelected ? (
               <span>Showing: <span className="text-foreground font-medium">Today ({displayDateFormatted})</span></span>
@@ -211,26 +212,24 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
             )}
           </div>
           {availableDates.length > 0 && (
-            <div className="flex items-center gap-2">
-              <label htmlFor="snapshot-date-picker" className="text-xs text-muted-foreground flex items-center gap-1">
-                <Calendar className="h-3 w-3" />
-                Select date:
+            <div className="flex items-center gap-2.5">
+              <label htmlFor="snapshot-date-picker" className="text-xs text-muted-foreground flex items-center gap-1.5 whitespace-nowrap">
+                <Calendar className="h-3.5 w-3.5" />
+                <span>Select date:</span>
               </label>
-              <div className="relative">
-                <input
-                  id="snapshot-date-picker"
-                  type="date"
-                  value={selectedDate || displayDate}
-                  onChange={(e) => setSelectedDate(e.target.value || null)}
-                  min={availableDates[0]}
-                  max={availableDates[availableDates.length - 1]}
-                  className="bg-background border border-border rounded-md px-2 py-1 pr-8 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:brightness-0 [&::-webkit-calendar-picker-indicator]:contrast-100"
-                />
-              </div>
+              <input
+                id="snapshot-date-picker"
+                type="date"
+                value={selectedDate || displayDate}
+                onChange={(e) => setSelectedDate(e.target.value || null)}
+                min={availableDates[0]}
+                max={availableDates[availableDates.length - 1]}
+                className="bg-background border border-border rounded-md px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:brightness-0 [&::-webkit-calendar-picker-indicator]:contrast-100"
+              />
               {selectedDate && (
                 <button
                   onClick={() => setSelectedDate(null)}
-                  className="text-xs text-muted-foreground hover:text-foreground underline"
+                  className="text-xs text-muted-foreground hover:text-foreground underline whitespace-nowrap"
                 >
                   Reset
                 </button>
@@ -246,7 +245,7 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
           trend={hrvTrend}
           icon={<Activity className="h-5 w-5" />}
           formatValue={(val) => `${val.toFixed(0)}ms`}
-          sparklineData={getSparklineData(history.hrv, lastIndex)}
+          sparklineData={displayDateIndex >= 0 ? getSparklineData(history.hrv || [], displayDateIndex) : undefined}
         />
         <MetricCard
           title="Resting HR"
@@ -255,7 +254,7 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
           invertTrend={true}
           icon={<Heart className="h-5 w-5" />}
           formatValue={(val) => `${val.toFixed(0)} bpm`}
-          sparklineData={getSparklineData(history.resting_hr, lastIndex)}
+          sparklineData={displayDateIndex >= 0 ? getSparklineData(history.resting_hr || [], displayDateIndex) : undefined}
         />
         <MetricCard
           title="Sleep Score"
@@ -263,7 +262,7 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
           trend={sleepTrend}
           icon={<Moon className="h-5 w-5" />}
           formatValue={(val) => `${val.toFixed(0)}/100`}
-          sparklineData={getSparklineData(history.sleep_score, lastIndex)}
+          sparklineData={displayDateIndex >= 0 ? getSparklineData(history.sleep_score || [], displayDateIndex) : undefined}
         />
         <MetricCard
           title="Steps"
@@ -271,7 +270,7 @@ export default function MetricCardsRow({ refreshKey }: MetricCardsRowProps) {
           trend={stepsTrend}
           icon={<Footprints className="h-5 w-5" />}
           formatValue={(val) => val.toLocaleString()}
-          sparklineData={getSparklineData(history.steps, lastIndex)}
+          sparklineData={displayDateIndex >= 0 ? getSparklineData(history.steps || [], displayDateIndex) : undefined}
         />
       </div>
     </div>
